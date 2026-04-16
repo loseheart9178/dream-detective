@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Case, Suspect, Clue, Victim, Solution } from '../types.js'
+import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse } from '../types.js'
 
 // 类型定义
 type GeneratedCaseData = Omit<Case, 'id' | 'difficulty' | 'keywords' | 'createdAt'>
@@ -74,6 +74,162 @@ export async function submitAnswer(
 
 export async function getSolution(caseId: string): Promise<Case | null> {
   return cases.get(caseId) || null
+}
+
+// 询问嫌疑人
+export async function askSuspect(
+  caseId: string,
+  suspectId: string,
+  question: string
+): Promise<AskSuspectResponse> {
+  const caseData = cases.get(caseId)
+  if (!caseData) {
+    throw new Error('案件不存在')
+  }
+
+  const suspect = caseData.suspects.find(s => s.id === suspectId)
+  if (!suspect) {
+    throw new Error('嫌疑人不存在')
+  }
+
+  const isKiller = suspectId === caseData.solution.killerId
+
+  // 检查是否配置了API
+  const apiKey = process.env.OPENAI_API_KEY || process.env.DASHSCOPE_API_KEY
+
+  if (!apiKey || apiKey === 'your_openai_api_key_here' || apiKey === 'your_dashscope_api_key_here') {
+    // 返回示例回答
+    return generateSampleAnswer(suspect, question, isKiller)
+  }
+
+  // 调用AI生成回答
+  return generateAnswerWithAI(suspect, question, isKiller, caseData)
+}
+
+// 示例回答 (无API时使用)
+function generateSampleAnswer(suspect: Suspect, question: string, isKiller: boolean): AskSuspectResponse {
+  const answers: Record<string, Record<string, string>> = {
+    s1: {
+      '你当时在哪里?': '案发时我在公司开会，有十几个员工可以作证。会议从晚上7点一直开到9点半。',
+      '你和死者关系如何?': '我们关系很好，是多年的生意伙伴。虽然有过一些商业上的分歧，但都是为了公司好。',
+      '你有什么要说的吗?': '我对刘总的离世感到非常悲痛。他是一个优秀的合作伙伴，我会想念他的。'
+    },
+    s2: {
+      '你当时在哪里?': '案发时我在餐厅吃晚餐，有服务员和监控可以证明。我大约8点到9点都在那里。',
+      '你和死者关系如何?': '刘总对我很好，他是个正直的人。我为他工作了三年，一直很愉快。',
+      '你有什么要说的吗?': '我不知道发生了什么，希望警方能尽快找到凶手。'
+    },
+    s3: {
+      '你当时在哪里?': '案发时我在值班室看监控，整晚都在岗。没有看到任何人进出大楼。',
+      '你和死者关系如何?': '刘总...他对我不太满意，之前因为一些小事批评过我。但我不想报复他。',
+      '你有什么要说的吗?': '那天晚上真的没有异常情况，一切都很正常。'
+    },
+    s4: {
+      '你当时在哪里?': '案发时我在医院值班，有同事和病人可以证明。我整晚都在急诊室。',
+      '你和死者关系如何?': '我们已经离婚三年了，虽然有过争执，但那都是过去的事了。我已经放下了。',
+      '你有什么要说的吗?': '我对他的死感到遗憾，但我们已经没有关系了。'
+    },
+    s5: {
+      '你当时在哪里?': '案发时我在事务所处理文件，有同事可以证明。我那天加班到很晚。',
+      '你和死者关系如何?': '刘总是我的客户，我们合作多年。他是一个守法的好公民，我很尊重他。',
+      '你有什么要说的吗?': '作为他的律师，我对他的离世深感遗憾。希望警方能尽快破案。'
+    }
+  }
+
+  const suspectAnswers = answers[suspect.id] || {}
+  const answer = suspectAnswers[question] || generateDefaultAnswer(suspect, question, isKiller)
+
+  return {
+    answer,
+    isLie: isKiller && question.includes('关系')
+  }
+}
+
+function generateDefaultAnswer(suspect: Suspect, question: string, isKiller: boolean): string {
+  if (question.includes('哪里') || question.includes('时间')) {
+    return suspect.alibi
+  }
+  if (question.includes('关系')) {
+    return `我和${suspect.relationToVictim}的关系，应该说是正常的。`
+  }
+  if (question.includes('动机') || question.includes('为什么')) {
+    return `我没有任何理由伤害他。`
+  }
+  return `关于这个问题，我只能说我不太清楚。`
+}
+
+// AI生成回答
+async function generateAnswerWithAI(
+  suspect: Suspect,
+  question: string,
+  isKiller: boolean,
+  caseData: Case
+): Promise<AskSuspectResponse> {
+  const prompt = buildAskPrompt(suspect, question, isKiller, caseData)
+
+  // 尝试OpenAI
+  if (process.env.OPENAI_API_KEY) {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 200
+      })
+    })
+
+    const data = await response.json()
+    const answer = data.choices[0].message.content.trim()
+    return { answer, isLie: isKiller }
+  }
+
+  // 尝试通义千问
+  if (process.env.DASHSCOPE_API_KEY) {
+    const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.DASHSCOPE_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'qwen-turbo',
+        input: { prompt },
+        parameters: { temperature: 0.7, max_tokens: 200 }
+      })
+    })
+
+    const data = await response.json()
+    const answer = data.output.text.trim()
+    return { answer, isLie: isKiller }
+  }
+
+  throw new Error('未配置AI API密钥')
+}
+
+function buildAskPrompt(suspect: Suspect, question: string, isKiller: boolean, caseData: Case): string {
+  const victimName = caseData.victim.name
+  const killerInfo = isKiller
+    ? `重要：你是真正的凶手！你的动机是：${suspect.motive}。你必须撒谎掩盖真相，但不要过于明显。当你被问到与死者关系时，要说：${suspect.lies}。你的不在场证明是假的：${suspect.alibi}。`
+    : `你不是凶手。你的动机是：${suspect.motive}，但你没有杀人。你的不在场证明是真的：${suspect.alibi}。你有一个秘密：${suspect.secret}，如果被问到相关话题，你会试图转移话题。`
+
+  return `你是一个谋杀案中的嫌疑人，请以第一人称回答问题。
+
+姓名：${suspect.name}
+年龄：${suspect.age}岁
+职业：${suspect.occupation}
+与死者关系：${suspect.relationToVictim}
+死者姓名：${victimName}
+
+${killerInfo}
+
+玩家问题：${question}
+
+请以自然、口语化的方式回答，保持角色设定。回答要简短（1-3句话），不要主动透露过多信息。如果问题涉及你的谎言或秘密，要自然地回避或撒谎。`
 }
 
 // AI生成案件

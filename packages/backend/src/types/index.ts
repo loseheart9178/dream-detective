@@ -58,3 +58,13 @@ export interface SubmitAnswerRequest {
   killerId: string
   explanation: string
 }
+
+export interface AskSuspectRequest {
+  suspectId: string
+  question: string
+}
+
+export interface AskSuspectResponse {
+  answer: string
+  isLie?: boolean
+}

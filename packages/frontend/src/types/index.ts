@@ -80,6 +80,16 @@ export interface SubmitAnswerResponse {
   solution?: Solution
 }
 
+export interface AskSuspectRequest {
+  suspectId: string
+  question: string
+}
+
+export interface AskSuspectResponse {
+  answer: string
+  isLie?: boolean
+}
+
 // 游戏状态类型
 export interface GameState {
   currentCase: Case | null

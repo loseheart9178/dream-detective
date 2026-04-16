@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import type { Case, Clue, Suspect } from '../types'
+import type { Case, Clue, Suspect, AskSuspectResponse } from '../types'
 
 type TabType = 'scene' | 'clues' | 'suspects' | 'submit'
+
+interface QuestionAnswer {
+  question: string
+  answer: string
+  isLoading?: boolean
+}
 
 export default function GamePage() {
   const { caseId } = useParams<{ caseId: string }>()
@@ -12,7 +18,8 @@ export default function GamePage() {
   const [activeTab, setActiveTab] = useState<TabType>('scene')
   const [collectedClues, setCollectedClues] = useState<string[]>([])
   const [selectedSuspect, setSelectedSuspect] = useState<Suspect | null>(null)
-  const [askedQuestions, setAskedQuestions] = useState<Record<string, string[]>>({})
+  const [askedQuestions, setAskedQuestions] = useState<Record<string, QuestionAnswer[]>>({})
+  const [askingQuestion, setAskingQuestion] = useState(false)
 
   useEffect(() => {
     fetchCase()
@@ -41,11 +48,64 @@ export default function GamePage() {
     }
   }
 
-  const handleAskQuestion = (suspectId: string, question: string) => {
+  const handleAskQuestion = async (suspectId: string, question: string) => {
+    // 检查是否已经问过这个问题
+    const existingQuestions = askedQuestions[suspectId] || []
+    if (existingQuestions.some(qa => qa.question === question)) {
+      return
+    }
+
+    // 添加加载状态
     setAskedQuestions(prev => ({
       ...prev,
-      [suspectId]: [...(prev[suspectId] || []), question]
+      [suspectId]: [...(prev[suspectId] || []), { question, answer: '', isLoading: true }]
     }))
+
+    setAskingQuestion(true)
+
+    try {
+      const response = await fetch(`/api/case/${caseId}/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suspectId, question })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        const answerData: AskSuspectResponse = data.data
+        // 更新回答
+        setAskedQuestions(prev => ({
+          ...prev,
+          [suspectId]: prev[suspectId].map(qa =>
+            qa.question === question
+              ? { ...qa, answer: answerData.answer, isLoading: false }
+              : qa
+          )
+        }))
+      } else {
+        // 错误处理
+        setAskedQuestions(prev => ({
+          ...prev,
+          [suspectId]: prev[suspectId].map(qa =>
+            qa.question === question
+              ? { ...qa, answer: '对方似乎不愿回答...', isLoading: false }
+              : qa
+          )
+        }))
+      }
+    } catch (err) {
+      console.error(err)
+      setAskedQuestions(prev => ({
+        ...prev,
+        [suspectId]: prev[suspectId].map(qa =>
+          qa.question === question
+            ? { ...qa, answer: '网络错误，请稍后重试', isLoading: false }
+            : qa
+        )
+      }))
+    } finally {
+      setAskingQuestion(false)
+    }
   }
 
   if (loading) {
@@ -187,21 +247,40 @@ export default function GamePage() {
                 </div>
                 <div className="mt-4 space-y-2">
                   <p className="text-slate-400 text-sm">询问问题:</p>
-                  {['你当时在哪里?', '你和死者关系如何?', '你有什么要说的吗?'].map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => handleAskQuestion(selectedSuspect.id, q)}
-                      className="block w-full text-left px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded text-slate-300 text-sm"
-                    >
-                      {q}
-                    </button>
-                  ))}
+                  {['你当时在哪里?', '你和死者关系如何?', '你有什么要说的吗?'].map((q) => {
+                    const isAsked = askedQuestions[selectedSuspect.id]?.some(qa => qa.question === q)
+                    return (
+                      <button
+                        key={q}
+                        onClick={() => !isAsked && !askingQuestion && handleAskQuestion(selectedSuspect.id, q)}
+                        disabled={isAsked || askingQuestion}
+                        className={`block w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                          isAsked
+                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                            : 'bg-slate-600 hover:bg-slate-500 text-slate-300'
+                        }`}
+                      >
+                        {isAsked ? '✓ ' : ''}{q}
+                      </button>
+                    )
+                  })}
                 </div>
                 {askedQuestions[selectedSuspect.id]?.length > 0 && (
-                  <div className="mt-4 p-3 bg-slate-800 rounded">
-                    <p className="text-slate-400 text-sm mb-2">已询问:</p>
-                    {askedQuestions[selectedSuspect.id].map((q, i) => (
-                      <p key={i} className="text-slate-300 text-sm">• {q}</p>
+                  <div className="mt-4 space-y-3">
+                    <p className="text-slate-400 text-sm">对话记录:</p>
+                    {askedQuestions[selectedSuspect.id].map((qa, i) => (
+                      <div key={i} className="p-3 bg-slate-800 rounded">
+                        <p className="text-primary-400 text-sm mb-2">
+                          <strong>你:</strong> {qa.question}
+                        </p>
+                        {qa.isLoading ? (
+                          <p className="text-slate-500 text-sm italic">正在思考中...</p>
+                        ) : (
+                          <p className="text-slate-300 text-sm">
+                            <strong>{selectedSuspect.name}:</strong> {qa.answer}
+                          </p>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}

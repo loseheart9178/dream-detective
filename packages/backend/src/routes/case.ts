@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { generateCase, getCase, submitAnswer, getSolution } from '../services/caseService.js'
+import { generateCase, getCase, submitAnswer, getSolution, askSuspect } from '../services/caseService.js'
 
 const router = Router()
 
@@ -56,9 +56,29 @@ router.get('/:id/solution', async (req, res) => {
     const solution = await getSolution(req.params.id)
     res.json({ success: true, data: solution })
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error instanceof Error ? error.message : '获取真相失败'
+    })
+  }
+})
+
+// 询问嫌疑人
+router.post('/:id/ask', async (req, res) => {
+  try {
+    const { suspectId, question } = req.body
+    if (!suspectId || !question) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供嫌疑人ID和问题'
+      })
+    }
+    const result = await askSuspect(req.params.id, suspectId, question)
+    res.json({ success: true, data: result })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '询问失败'
     })
   }
 })
