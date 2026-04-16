@@ -50,10 +50,16 @@ export interface Case {
 }
 
 // 用户进度相关类型
+export interface QuestionAnswer {
+  question: string
+  answer: string
+}
+
 export interface UserProgress {
   caseId: string
+  caseTitle: string
   collectedClues: string[]
-  askedQuestions: Record<string, string[]>
+  askedQuestions: Record<string, QuestionAnswer[]>
   attempts: number
   completed: boolean
   score: number

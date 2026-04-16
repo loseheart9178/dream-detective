@@ -1,17 +1,13 @@
-import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
-import type { Case, Clue, Suspect, AskSuspectResponse } from '../types'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import type { Case, Clue, Suspect, AskSuspectResponse, QuestionAnswer } from '../types'
+import { useGameProgress } from '../hooks/useGameProgress'
 
 type TabType = 'scene' | 'clues' | 'suspects' | 'submit'
 
-interface QuestionAnswer {
-  question: string
-  answer: string
-  isLoading?: boolean
-}
-
 export default function GamePage() {
   const { caseId } = useParams<{ caseId: string }>()
+  const navigate = useNavigate()
   const [caseData, setCaseData] = useState<Case | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -21,8 +17,20 @@ export default function GamePage() {
   const [askedQuestions, setAskedQuestions] = useState<Record<string, QuestionAnswer[]>>({})
   const [askingQuestion, setAskingQuestion] = useState(false)
 
+  const {
+    getProgress,
+    createProgress,
+    updateCollectedClues,
+    updateAskedQuestions,
+    markCompleted,
+    incrementAttempts
+  } = useGameProgress()
+
+  // 加载案件和进度
   useEffect(() => {
-    fetchCase()
+    if (caseId) {
+      fetchCase()
+    }
   }, [caseId])
 
   const fetchCase = async () => {
@@ -31,6 +39,20 @@ export default function GamePage() {
       const data = await response.json()
       if (data.success) {
         setCaseData(data.data)
+        // 恢复进度
+        const savedProgress = getProgress(caseId!)
+        if (savedProgress) {
+          setCollectedClues(savedProgress.collectedClues)
+          // 转换askedQuestions格式
+          const questions: Record<string, QuestionAnswer[]> = {}
+          for (const [suspectId, qaList] of Object.entries(savedProgress.askedQuestions)) {
+            questions[suspectId] = qaList as QuestionAnswer[]
+          }
+          setAskedQuestions(questions)
+        } else {
+          // 创建新进度
+          createProgress(caseId!, data.data.title)
+        }
       } else {
         setError(data.message || '加载案件失败')
       }
@@ -41,6 +63,25 @@ export default function GamePage() {
       setLoading(false)
     }
   }
+
+  // 保存线索进度
+  useEffect(() => {
+    if (caseId && collectedClues.length > 0) {
+      updateCollectedClues(caseId, collectedClues)
+    }
+  }, [collectedClues, caseId, updateCollectedClues])
+
+  // 保存问答进度
+  useEffect(() => {
+    if (caseId && Object.keys(askedQuestions).length > 0) {
+      // 保存所有嫌疑人的问答
+      for (const [suspectId, questions] of Object.entries(askedQuestions)) {
+        if (questions.some(qa => qa.answer && !qa.isLoading)) {
+          updateAskedQuestions(caseId, suspectId, questions.filter(qa => !qa.isLoading))
+        }
+      }
+    }
+  }, [askedQuestions, caseId, updateAskedQuestions])
 
   const handleCollectClue = (clue: Clue) => {
     if (!collectedClues.includes(clue.id)) {
@@ -290,14 +331,32 @@ export default function GamePage() {
         )}
 
         {activeTab === 'submit' && (
-          <SubmitForm caseId={caseId!} suspects={caseData.suspects} />
+          <SubmitForm
+            caseId={caseId!}
+            suspects={caseData.suspects}
+            onCorrectAnswer={(score) => {
+              markCompleted(caseId!, score)
+              navigate(`/result/${caseId}`)
+            }}
+            onWrongAnswer={() => incrementAttempts(caseId!)}
+          />
         )}
       </div>
     </div>
   )
 }
 
-function SubmitForm({ caseId, suspects }: { caseId: string; suspects: Suspect[] }) {
+function SubmitForm({
+  caseId,
+  suspects,
+  onCorrectAnswer,
+  onWrongAnswer
+}: {
+  caseId: string
+  suspects: Suspect[]
+  onCorrectAnswer: (score: number) => void
+  onWrongAnswer: () => void
+}) {
   const [killerId, setKillerId] = useState('')
   const [explanation, setExplanation] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -319,6 +378,11 @@ function SubmitForm({ caseId, suspects }: { caseId: string; suspects: Suspect[] 
       const data = await response.json()
       if (data.success) {
         setResult(data.data)
+        if (data.data.correct) {
+          onCorrectAnswer(data.data.score)
+        } else {
+          onWrongAnswer()
+        }
       }
     } catch (err) {
       console.error(err)
@@ -335,12 +399,12 @@ function SubmitForm({ caseId, suspects }: { caseId: string; suspects: Suspect[] 
         </h2>
         <p className="text-slate-300 mb-2">得分: {result.score}/100</p>
         <p className="text-slate-400 mb-4">{result.feedback}</p>
-        <a
-          href={`/result/${caseId}`}
+        <button
+          onClick={() => result.correct ? onCorrectAnswer(result.score) : null}
           className="inline-block px-6 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-lg"
         >
-          查看真相
-        </a>
+          {result.correct ? '查看真相' : '继续推理'}
+        </button>
       </div>
     )
   }
