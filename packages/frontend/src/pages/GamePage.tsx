@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import type { Case, Clue, Suspect, AskSuspectResponse, QuestionAnswer } from '../types'
 import { useGameProgress } from '../hooks/useGameProgress'
 
@@ -16,6 +16,7 @@ export default function GamePage() {
   const [selectedSuspect, setSelectedSuspect] = useState<Suspect | null>(null)
   const [askedQuestions, setAskedQuestions] = useState<Record<string, QuestionAnswer[]>>({})
   const [askingQuestion, setAskingQuestion] = useState(false)
+  const [showSaveNotice, setShowSaveNotice] = useState(false)
 
   const {
     getProgress,
@@ -23,8 +24,15 @@ export default function GamePage() {
     updateCollectedClues,
     updateAskedQuestions,
     markCompleted,
-    incrementAttempts
+    incrementAttempts,
+    saveProgress
   } = useGameProgress()
+
+  // 显示保存提示
+  const showSaveMessage = useCallback(() => {
+    setShowSaveNotice(true)
+    setTimeout(() => setShowSaveNotice(false), 2000)
+  }, [])
 
   // 加载案件和进度
   useEffect(() => {
@@ -68,8 +76,9 @@ export default function GamePage() {
   useEffect(() => {
     if (caseId && collectedClues.length > 0) {
       updateCollectedClues(caseId, collectedClues)
+      showSaveMessage()
     }
-  }, [collectedClues, caseId, updateCollectedClues])
+  }, [collectedClues, caseId, updateCollectedClues, showSaveMessage])
 
   // 保存问答进度
   useEffect(() => {
@@ -78,10 +87,11 @@ export default function GamePage() {
       for (const [suspectId, questions] of Object.entries(askedQuestions)) {
         if (questions.some(qa => qa.answer && !qa.isLoading)) {
           updateAskedQuestions(caseId, suspectId, questions.filter(qa => !qa.isLoading))
+          showSaveMessage()
         }
       }
     }
-  }, [askedQuestions, caseId, updateAskedQuestions])
+  }, [askedQuestions, caseId, updateAskedQuestions, showSaveMessage])
 
   const handleCollectClue = (clue: Clue) => {
     if (!collectedClues.includes(clue.id)) {
@@ -172,10 +182,43 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen p-4">
+      {/* 保存提示 */}
+      {showSaveNotice && (
+        <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-pulse">
+          进度已保存
+        </div>
+      )}
+
       {/* 案件标题 */}
       <div className="bg-slate-800 rounded-lg p-4 mb-4">
-        <h1 className="text-2xl font-bold text-primary-400">{caseData.title}</h1>
-        <p className="text-slate-400 text-sm mt-1">难度: {'★'.repeat(caseData.difficulty)}</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-bold text-primary-400">{caseData.title}</h1>
+            <p className="text-slate-400 text-sm mt-1">难度: {'★'.repeat(caseData.difficulty)}</p>
+          </div>
+          <Link
+            to="/"
+            className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-700 rounded"
+          >
+            返回首页
+          </Link>
+        </div>
+      </div>
+
+      {/* 进度状态 */}
+      <div className="bg-slate-800/50 rounded-lg p-3 mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-4 text-sm">
+          <span className="text-slate-400">
+            线索: <span className="text-primary-400">{collectedClues.length}</span>/{caseData.clues.length}
+          </span>
+          <span className="text-slate-400">
+            询问: <span className="text-primary-400">{Object.values(askedQuestions).flat().filter(qa => qa.answer).length}</span>次
+          </span>
+        </div>
+        <span className="text-green-400 text-sm flex items-center gap-1">
+          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+          已自动保存
+        </span>
       </div>
 
       {/* 标签导航 */}
