@@ -53,6 +53,7 @@ export interface Case {
 export interface QuestionAnswer {
   question: string
   answer: string
+  isLoading?: boolean
 }
 
 export interface UserProgress {

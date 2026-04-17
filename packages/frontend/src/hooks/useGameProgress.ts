@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { UserProgress, QuestionAnswer } from '../types'
+import type { UserProgress, QuestionAnswer, Case } from '../types'
 
 const STORAGE_KEY = 'dream-detective-progress'
+const CASES_STORAGE_KEY = 'dream-detective-cases'
 
 export function useGameProgress() {
   const [savedProgress, setSavedProgress] = useState<UserProgress | null>(null)
@@ -143,6 +144,49 @@ export function useGameProgress() {
     }
   }, [getProgress, saveProgress])
 
+  // 保存案件数据到localStorage
+  const saveCaseData = useCallback((caseData: Case) => {
+    try {
+      const stored = localStorage.getItem(CASES_STORAGE_KEY)
+      const casesList: Case[] = stored ? JSON.parse(stored) : []
+      const existingIndex = casesList.findIndex(c => c.id === caseData.id)
+      if (existingIndex >= 0) {
+        casesList[existingIndex] = caseData
+      } else {
+        casesList.push(caseData)
+      }
+      localStorage.setItem(CASES_STORAGE_KEY, JSON.stringify(casesList))
+    } catch (err) {
+      console.error('保存案件数据失败:', err)
+    }
+  }, [])
+
+  // 从localStorage获取案件数据
+  const getCaseData = useCallback((caseId: string): Case | null => {
+    try {
+      const stored = localStorage.getItem(CASES_STORAGE_KEY)
+      if (stored) {
+        const casesList: Case[] = JSON.parse(stored)
+        return casesList.find(c => c.id === caseId) || null
+      }
+    } catch (err) {
+      console.error('获取案件数据失败:', err)
+    }
+    return null
+  }, [])
+
+  // 删除案件数据
+  const deleteCaseData = useCallback((caseId: string) => {
+    try {
+      const stored = localStorage.getItem(CASES_STORAGE_KEY)
+      const casesList: Case[] = stored ? JSON.parse(stored) : []
+      const filtered = casesList.filter(c => c.id !== caseId)
+      localStorage.setItem(CASES_STORAGE_KEY, JSON.stringify(filtered))
+    } catch (err) {
+      console.error('删除案件数据失败:', err)
+    }
+  }, [])
+
   // 获取未完成的进度列表
   const inProgressGames = allProgress.filter(p => !p.completed)
 
@@ -162,6 +206,9 @@ export function useGameProgress() {
     updateAskedQuestions,
     markCompleted,
     incrementAttempts,
-    loadAllProgress
+    loadAllProgress,
+    saveCaseData,
+    getCaseData,
+    deleteCaseData
   }
 }

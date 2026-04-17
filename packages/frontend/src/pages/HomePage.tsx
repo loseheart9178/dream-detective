@@ -3,10 +3,31 @@ import { useGameProgress } from '../hooks/useGameProgress'
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { inProgressGames, completedGames, deleteProgress } = useGameProgress()
+  const { inProgressGames, completedGames, deleteProgress, getCaseData, saveCaseData } = useGameProgress()
 
-  const handleContinue = (caseId: string) => {
-    navigate(`/game/${caseId}`)
+  const handleContinue = async (caseId: string) => {
+    // 检查localStorage是否有案件数据
+    const localCaseData = getCaseData(caseId)
+    if (localCaseData) {
+      navigate(`/game/${caseId}`)
+      return
+    }
+
+    // 没有本地数据，尝试从后端获取
+    try {
+      const response = await fetch(`/api/case/${caseId}`)
+      const data = await response.json()
+      if (data.success) {
+        saveCaseData(data.data)
+        navigate(`/game/${caseId}`)
+      } else {
+        alert('案件数据已过期，请删除此存档并开始新游戏')
+        deleteProgress(caseId)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('网络错误，请检查后端服务是否启动')
+    }
   }
 
   const handleDelete = (caseId: string, e: React.MouseEvent) => {

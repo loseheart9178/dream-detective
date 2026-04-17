@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { GenerateCaseRequest } from '../types'
+import type { GenerateCaseRequest, Case } from '../types'
+import { useGameProgress } from '../hooks/useGameProgress'
 
 export default function CreateCasePage() {
   const navigate = useNavigate()
+  const { saveCaseData } = useGameProgress()
   const [keywords, setKeywords] = useState('')
   const [difficulty, setDifficulty] = useState(2)
   const [numSuspects, setNumSuspects] = useState(4)
@@ -35,6 +37,12 @@ export default function CreateCasePage() {
       const data = await response.json()
 
       if (data.success && data.data.caseId) {
+        // 获取并保存案件数据到localStorage
+        const caseResponse = await fetch(`/api/case/${data.data.caseId}`)
+        const caseData = await caseResponse.json()
+        if (caseData.success) {
+          saveCaseData(caseData.data as Case)
+        }
         navigate(`/game/${data.data.caseId}`)
       } else {
         setError(data.message || '生成失败，请重试')

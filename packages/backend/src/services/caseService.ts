@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse } from '../types.js'
+import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse } from '../types'
 
 // 类型定义
 type GeneratedCaseData = Omit<Case, 'id' | 'difficulty' | 'keywords' | 'createdAt'>
@@ -87,7 +87,7 @@ export async function askSuspect(
     throw new Error('案件不存在')
   }
 
-  const suspect = caseData.suspects.find(s => s.id === suspectId)
+  const suspect = caseData.suspects.find((s: Suspect) => s.id === suspectId)
   if (!suspect) {
     throw new Error('嫌疑人不存在')
   }

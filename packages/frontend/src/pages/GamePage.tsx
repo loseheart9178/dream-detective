@@ -17,6 +17,8 @@ export default function GamePage() {
   const [askedQuestions, setAskedQuestions] = useState<Record<string, QuestionAnswer[]>>({})
   const [askingQuestion, setAskingQuestion] = useState(false)
   const [showSaveNotice, setShowSaveNotice] = useState(false)
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
 
   const {
     getProgress,
@@ -25,7 +27,9 @@ export default function GamePage() {
     updateAskedQuestions,
     markCompleted,
     incrementAttempts,
-    saveProgress
+    deleteProgress,
+    saveCaseData,
+    getCaseData
   } = useGameProgress()
 
   // 显示保存提示
@@ -43,22 +47,43 @@ export default function GamePage() {
 
   const fetchCase = async () => {
     try {
-      const response = await fetch(`/api/case/${caseId}`)
-      const data = await response.json()
-      if (data.success) {
-        setCaseData(data.data)
+      // 先尝试从localStorage获取案件数据
+      const localCaseData = getCaseData(caseId!)
+      if (localCaseData) {
+        setCaseData(localCaseData)
         // 恢复进度
         const savedProgress = getProgress(caseId!)
         if (savedProgress) {
           setCollectedClues(savedProgress.collectedClues)
-          // 转换askedQuestions格式
           const questions: Record<string, QuestionAnswer[]> = {}
           for (const [suspectId, qaList] of Object.entries(savedProgress.askedQuestions)) {
             questions[suspectId] = qaList as QuestionAnswer[]
           }
           setAskedQuestions(questions)
         } else {
-          // 创建新进度
+          createProgress(caseId!, localCaseData.title)
+        }
+        setLoading(false)
+        return
+      }
+
+      // localStorage没有，从后端获取
+      const response = await fetch(`/api/case/${caseId}`)
+      const data = await response.json()
+      if (data.success) {
+        setCaseData(data.data)
+        // 保存到localStorage
+        saveCaseData(data.data)
+        // 恢复进度
+        const savedProgress = getProgress(caseId!)
+        if (savedProgress) {
+          setCollectedClues(savedProgress.collectedClues)
+          const questions: Record<string, QuestionAnswer[]> = {}
+          for (const [suspectId, qaList] of Object.entries(savedProgress.askedQuestions)) {
+            questions[suspectId] = qaList as QuestionAnswer[]
+          }
+          setAskedQuestions(questions)
+        } else {
           createProgress(caseId!, data.data.title)
         }
       } else {
@@ -182,9 +207,9 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen p-4">
-      {/* 保存提示 */}
+      {/* 保存提示 - 左上角 */}
       {showSaveNotice && (
-        <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-pulse">
+        <div className="fixed top-4 left-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-pulse">
           进度已保存
         </div>
       )}
@@ -192,16 +217,24 @@ export default function GamePage() {
       {/* 案件标题 */}
       <div className="bg-slate-800 rounded-lg p-4 mb-4">
         <div className="flex justify-between items-start">
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-primary-400">{caseData.title}</h1>
             <p className="text-slate-400 text-sm mt-1">难度: {'★'.repeat(caseData.difficulty)}</p>
           </div>
-          <Link
-            to="/"
-            className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-700 rounded"
-          >
-            返回首页
-          </Link>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowRegenerateModal(true)}
+              className="text-slate-400 hover:text-amber-400 text-sm px-3 py-1 bg-slate-700 rounded flex items-center gap-1"
+            >
+              <span>🔄</span> 重新生成
+            </button>
+            <Link
+              to="/"
+              className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-700 rounded"
+            >
+              返回首页
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -385,8 +418,83 @@ export default function GamePage() {
           />
         )}
       </div>
+
+      {/* 重新生成案件弹窗 */}
+      {showRegenerateModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold text-slate-200 mb-4">重新生成案件</h2>
+            <p className="text-slate-400 mb-6">
+              当前案件进度将会丢失。是否保存当前案件后再生成新案件？
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRegenerateModal(false)}
+                disabled={regenerating}
+                className="flex-1 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleRegenerate(false)}
+                disabled={regenerating}
+                className="flex-1 py-2 bg-slate-600 text-slate-300 rounded-lg hover:bg-slate-500 disabled:opacity-50"
+              >
+                不保存，直接生成
+              </button>
+              <button
+                onClick={() => handleRegenerate(true)}
+                disabled={regenerating}
+                className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-500 disabled:opacity-50"
+              >
+                保存并生成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+
+  // 重新生成案件
+  async function handleRegenerate(saveCurrent: boolean) {
+    if (!caseData) return
+
+    setRegenerating(true)
+    try {
+      // 如果需要保存当前案件，标记为已保存
+      if (saveCurrent && caseId) {
+        // 当前案件已自动保存，无需额外操作
+      } else {
+        // 删除当前进度
+        deleteProgress(caseId!)
+      }
+
+      // 生成新案件
+      const response = await fetch('/api/case/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keywords: caseData.keywords,
+          difficulty: caseData.difficulty,
+          numSuspects: caseData.suspects.length
+        })
+      })
+
+      const data = await response.json()
+      if (data.success && data.data.caseId) {
+        navigate(`/game/${data.data.caseId}`)
+      } else {
+        alert('生成失败，请重试')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('网络错误')
+    } finally {
+      setRegenerating(false)
+      setShowRegenerateModal(false)
+    }
+  }
 }
 
 function SubmitForm({
