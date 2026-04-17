@@ -12,7 +12,6 @@ export function useApiConfig() {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const config = JSON.parse(stored) as ApiConfig
-        // 只显示密钥后4位
         setApiConfig(config)
       }
     } catch (err) {
@@ -48,11 +47,18 @@ export function useApiConfig() {
     return `${key.slice(0, 4)}...${key.slice(-4)}`
   }, [apiConfig])
 
+  // 获取完整的API配置（包含默认值）
+  const getFullApiConfig = useCallback(() => {
+    if (!apiConfig) return null
+    return apiConfig
+  }, [apiConfig])
+
   return {
     apiConfig,
     saveApiConfig,
     deleteApiConfig,
     getDisplayApiKey,
+    getFullApiConfig,
     hasApiKey: !!apiConfig?.apiKey
   }
 }

@@ -3,6 +3,7 @@ import HomePage from './pages/HomePage'
 import CreateCasePage from './pages/CreateCasePage'
 import GamePage from './pages/GamePage'
 import ResultPage from './pages/ResultPage'
+import SettingsPage from './pages/SettingsPage'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <Route path="/create" element={<CreateCasePage />} />
           <Route path="/game/:caseId" element={<GamePage />} />
           <Route path="/result/:caseId" element={<ResultPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>
     </BrowserRouter>

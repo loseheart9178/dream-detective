@@ -1,8 +1,117 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse } from '../types'
+import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider } from '../types'
 
 // 类型定义
 type GeneratedCaseData = Omit<Case, 'id' | 'difficulty' | 'keywords' | 'createdAt'>
+
+// API供应商配置
+const API_PROVIDERS: Record<ApiProvider, {
+  baseUrl: string
+  defaultModel: string
+  headers: (key: string) => Record<string, string>
+  buildBody: (model: string, prompt: string) => object
+  parseResponse: (data: any) => string
+}> = {
+  openai: {
+    baseUrl: 'https://api.openai.com/v1/chat/completions',
+    defaultModel: 'gpt-4o',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    }),
+    buildBody: (model, prompt) => ({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  },
+  dashscope: {
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
+    defaultModel: 'qwen-turbo',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    }),
+    buildBody: (model, prompt) => ({
+      model,
+      input: { prompt },
+      parameters: { temperature: 0.8 }
+    }),
+    parseResponse: (data) => data.output?.text || ''
+  },
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com/v1/chat/completions',
+    defaultModel: 'deepseek-chat',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    }),
+    buildBody: (model, prompt) => ({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  },
+  claude: {
+    baseUrl: 'https://api.anthropic.com/v1/messages',
+    defaultModel: 'claude-3-opus-20240229',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01'
+    }),
+    buildBody: (model, prompt) => ({
+      model,
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: prompt }]
+    }),
+    parseResponse: (data) => data.content?.[0]?.text || ''
+  },
+  zhipu: {
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    defaultModel: 'glm-4',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    }),
+    buildBody: (model, prompt) => ({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  },
+  moonshot: {
+    baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+    defaultModel: 'moonshot-v1-8k',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    }),
+    buildBody: (model, prompt) => ({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  },
+  custom: {
+    baseUrl: '',
+    defaultModel: '',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    }),
+    buildBody: (model, prompt) => ({
+      model: model || 'default',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || data.output?.text || data.content?.[0]?.text || ''
+  }
+}
 
 // 内存存储 (开发阶段)
 const cases: Map<string, Case> = new Map()
@@ -115,12 +224,14 @@ export async function generateCase(params: {
   difficulty: number
   numSuspects: number
   apiKey?: string
-  apiProvider?: 'openai' | 'dashscope'
+  apiProvider?: ApiProvider
+  apiUrl?: string
+  model?: string
 }): Promise<{ caseId: string }> {
-  const { keywords, difficulty, numSuspects, apiKey, apiProvider } = params
+  const { keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model } = params
 
   // 调用AI服务生成案件
-  const caseData = await generateCaseWithAI(keywords, difficulty, numSuspects, apiKey, apiProvider)
+  const caseData = await generateCaseWithAI(keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model)
   const caseId = uuidv4()
 
   const newCase: Case = {
@@ -343,7 +454,9 @@ async function generateCaseWithAI(
   difficulty: number,
   numSuspects: number,
   apiKey?: string,
-  apiProvider?: 'openai' | 'dashscope'
+  apiProvider?: ApiProvider,
+  apiUrl?: string,
+  model?: string
 ): Promise<GeneratedCaseData> {
   // 检查是否配置了API（前端传入或环境变量）
   const hasApiKey = apiKey ||
@@ -356,7 +469,7 @@ async function generateCaseWithAI(
   }
 
   // 调用真实AI API
-  return generateCaseWithRealAI(keywords, difficulty, numSuspects, apiKey, apiProvider)
+  return generateCaseWithRealAI(keywords, difficulty, numSuspects, apiKey, apiProvider || 'openai', apiUrl, model)
 }
 
 // 示例案件 (用于开发测试) - 随机选择模板
@@ -390,44 +503,53 @@ async function generateCaseWithRealAI(
   difficulty: number,
   numSuspects: number,
   apiKey?: string,
-  apiProvider?: 'openai' | 'dashscope'
+  apiProvider: ApiProvider = 'openai',
+  apiUrl?: string,
+  model?: string
 ): Promise<GeneratedCaseData> {
   const prompt = buildPrompt(keywords, difficulty, numSuspects)
 
-  // 优先使用前端传入的API Key，否则使用环境变量
-  const openaiKey = apiKey && apiProvider === 'openai' ? apiKey : process.env.OPENAI_API_KEY
-  const dashscopeKey = apiKey && apiProvider === 'dashscope' ? apiKey : process.env.DASHSCOPE_API_KEY
-
-  // 尝试OpenAI
-  if (openaiKey && openaiKey !== 'your_openai_api_key_here') {
-    return await callOpenAI(prompt, openaiKey, numSuspects)
+  // 获取API密钥
+  let key = apiKey
+  if (!key) {
+    // 尝试从环境变量获取
+    if (apiProvider === 'openai' && process.env.OPENAI_API_KEY) {
+      key = process.env.OPENAI_API_KEY
+    } else if (apiProvider === 'dashscope' && process.env.DASHSCOPE_API_KEY) {
+      key = process.env.DASHSCOPE_API_KEY
+    }
   }
 
-  // 尝试通义千问
-  if (dashscopeKey && dashscopeKey !== 'your_dashscope_api_key_here') {
-    return await callDashscope(prompt, dashscopeKey, numSuspects)
+  if (!key) {
+    throw new Error('未配置AI API密钥')
   }
 
-  throw new Error('未配置AI API密钥')
+  // 调用统一的API函数
+  return callAIAPI(prompt, key, apiProvider, apiUrl, model, numSuspects)
 }
 
-// 调用OpenAI API（带超时和重试）
-async function callOpenAI(prompt: string, apiKey: string, numSuspects: number, retries = 3): Promise<GeneratedCaseData> {
+// 统一调用AI API（带超时和重试）
+async function callAIAPI(
+  prompt: string,
+  apiKey: string,
+  provider: ApiProvider,
+  customUrl?: string,
+  customModel?: string,
+  numSuspects: number = 4,
+  retries = 3
+): Promise<GeneratedCaseData> {
+  const config = API_PROVIDERS[provider]
+  const url = customUrl || config.baseUrl
+  const model = customModel || config.defaultModel
+
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 90000) // 90秒超时
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.8
-      }),
+      headers: config.headers(apiKey),
+      body: JSON.stringify(config.buildBody(model, prompt)),
       signal: controller.signal
     })
 
@@ -435,74 +557,25 @@ async function callOpenAI(prompt: string, apiKey: string, numSuspects: number, r
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(`OpenAI API错误: ${response.status} - ${errorData.error?.message || '未知错误'}`)
+      throw new Error(`${provider} API错误: ${response.status} - ${errorData.error?.message || errorData.message || '未知错误'}`)
     }
 
     const data = await response.json()
+    const content = config.parseResponse(data)
 
-    if (!data.choices?.[0]?.message?.content) {
-      throw new Error('OpenAI API返回格式错误')
+    if (!content) {
+      throw new Error(`${provider} API返回格式错误`)
     }
 
-    const content = data.choices[0].message.content
     return parseAIResponse(content, numSuspects)
   } catch (error: unknown) {
     clearTimeout(timeout)
 
     // 网络错误或超时，尝试重试
     if (retries > 0 && (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch')))) {
-      console.log(`OpenAI请求失败，剩余重试次数: ${retries - 1}`)
-      await new Promise(resolve => setTimeout(resolve, 2000)) // 等待2秒后重试
-      return callOpenAI(prompt, apiKey, numSuspects, retries - 1)
-    }
-
-    throw error
-  }
-}
-
-// 调用通义千问API（带超时和重试）
-async function callDashscope(prompt: string, apiKey: string, numSuspects: number, retries = 3): Promise<GeneratedCaseData> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 90000) // 90秒超时
-
-  try {
-    const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'qwen-turbo',
-        input: { prompt },
-        parameters: { temperature: 0.8 }
-      }),
-      signal: controller.signal
-    })
-
-    clearTimeout(timeout)
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(`通义千问API错误: ${response.status} - ${errorData.message || '未知错误'}`)
-    }
-
-    const data = await response.json()
-
-    if (!data.output?.text) {
-      throw new Error('通义千问API返回格式错误')
-    }
-
-    const content = data.output.text
-    return parseAIResponse(content, numSuspects)
-  } catch (error: unknown) {
-    clearTimeout(timeout)
-
-    // 网络错误或超时，尝试重试
-    if (retries > 0 && (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch')))) {
-      console.log(`通义千问请求失败，剩余重试次数: ${retries - 1}`)
+      console.log(`${provider}请求失败，剩余重试次数: ${retries - 1}`)
       await new Promise(resolve => setTimeout(resolve, 2000))
-      return callDashscope(prompt, apiKey, numSuspects, retries - 1)
+      return callAIAPI(prompt, apiKey, provider, customUrl, customModel, numSuspects, retries - 1)
     }
 
     throw error

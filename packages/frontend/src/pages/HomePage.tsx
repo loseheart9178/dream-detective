@@ -1,9 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useGameProgress } from '../hooks/useGameProgress'
+import { useApiConfig } from '../hooks/useApiConfig'
 
 export default function HomePage() {
   const navigate = useNavigate()
   const { inProgressGames, completedGames, deleteProgress, getCaseData, saveCaseData } = useGameProgress()
+  const { hasApiKey } = useApiConfig()
 
   const handleContinue = async (caseId: string) => {
     // 检查localStorage是否有案件数据
@@ -39,7 +41,23 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
-      <div className="text-center max-w-2xl">
+      <div className="text-center max-w-2xl w-full">
+        {/* 设置按钮 */}
+        <div className="flex justify-end mb-4">
+          <Link
+            to="/settings"
+            className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-800 rounded"
+          >
+            <span>⚙️</span>
+            设置
+            {hasApiKey ? (
+              <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+            ) : (
+              <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+            )}
+          </Link>
+        </div>
+
         <h1 className="text-5xl font-bold text-primary-400 mb-4">
           造梦侦探
         </h1>

@@ -52,6 +52,19 @@ export interface GenerateCaseRequest {
   keywords: string
   difficulty: number
   numSuspects: number
+  apiKey?: string
+  apiProvider?: ApiProvider
+  apiUrl?: string
+  model?: string
+}
+
+export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'custom'
+
+export interface ApiConfig {
+  apiProvider: ApiProvider
+  apiKey: string
+  apiUrl?: string
+  model?: string
 }
 
 export interface SubmitAnswerRequest {

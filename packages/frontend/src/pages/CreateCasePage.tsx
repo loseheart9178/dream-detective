@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import type { GenerateCaseRequest, Case } from '../types'
 import { useGameProgress } from '../hooks/useGameProgress'
 import { useApiConfig } from '../hooks/useApiConfig'
-import { ApiKeySettings } from '../components/ApiKeySettings'
 
 // 预设关键词标签
 const PRESET_KEYWORDS = [
@@ -18,7 +17,7 @@ const PRESET_KEYWORDS = [
 export default function CreateCasePage() {
   const navigate = useNavigate()
   const { saveCaseData } = useGameProgress()
-  const { apiConfig, saveApiConfig, deleteApiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
+  const { apiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
   const [keywords, setKeywords] = useState('')
   const [difficulty, setDifficulty] = useState(2)
   const [numSuspects, setNumSuspects] = useState(4)
@@ -52,7 +51,9 @@ export default function CreateCasePage() {
         difficulty,
         numSuspects,
         apiKey: apiConfig?.apiKey,
-        apiProvider: apiConfig?.apiProvider
+        apiProvider: apiConfig?.apiProvider,
+        apiUrl: apiConfig?.apiUrl,
+        model: apiConfig?.model
       }
 
       setGeneratingStage('正在构思案件场景...')
@@ -99,6 +100,21 @@ export default function CreateCasePage() {
     setKeywords(value)
   }
 
+  // 获取API供应商显示名称
+  const getProviderName = () => {
+    if (!apiConfig?.apiProvider) return '未配置'
+    const providers: Record<string, string> = {
+      openai: 'OpenAI',
+      dashscope: '通义千问',
+      deepseek: 'DeepSeek',
+      claude: 'Claude',
+      zhipu: '智谱AI',
+      moonshot: 'Moonshot',
+      custom: '自定义'
+    }
+    return providers[apiConfig.apiProvider] || apiConfig.apiProvider
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
       <div className="w-full max-w-lg bg-slate-800 rounded-xl p-8">
@@ -106,22 +122,51 @@ export default function CreateCasePage() {
           <h1 className="text-3xl font-bold text-primary-400">
             创建新案件
           </h1>
-          <Link
-            to="/"
-            className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-700 rounded"
-          >
-            返回首页
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              to="/settings"
+              className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-700 rounded flex items-center gap-1"
+            >
+              <span>⚙️</span>
+              设置
+              {hasApiKey ? (
+                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+              ) : (
+                <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+              )}
+            </Link>
+            <Link
+              to="/"
+              className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-700 rounded"
+            >
+              返回首页
+            </Link>
+          </div>
         </div>
 
-        {/* API Key配置 */}
-        <ApiKeySettings
-          currentConfig={apiConfig}
-          onSave={saveApiConfig}
-          onDelete={deleteApiConfig}
-          displayKey={getDisplayApiKey()}
-          hasApiKey={hasApiKey}
-        />
+        {/* API配置状态提示 */}
+        <div className="bg-slate-700/50 rounded-lg p-3 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-400">AI API:</span>
+            {hasApiKey ? (
+              <span className="text-green-400 flex items-center gap-1">
+                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                {getProviderName()} ({apiConfig?.model || '默认模型'}) - {getDisplayApiKey()}
+              </span>
+            ) : (
+              <span className="text-amber-400 flex items-center gap-1">
+                <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+                未配置 (将使用示例案件)
+              </span>
+            )}
+          </div>
+          <Link
+            to="/settings"
+            className="text-primary-400 hover:text-primary-300 text-sm"
+          >
+            {hasApiKey ? '修改' : '去配置'}
+          </Link>
+        </div>
 
         <div className="space-y-6">
           {/* 难度选择 */}
