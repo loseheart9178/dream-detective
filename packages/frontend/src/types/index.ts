@@ -73,6 +73,14 @@ export interface GenerateCaseRequest {
   keywords: string
   difficulty: number
   numSuspects: number
+  apiKey?: string
+  apiProvider?: 'openai' | 'dashscope'
+}
+
+// API配置类型
+export interface ApiConfig {
+  apiKey: string
+  apiProvider: 'openai' | 'dashscope'
 }
 
 export interface SubmitAnswerRequest {

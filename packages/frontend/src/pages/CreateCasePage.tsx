@@ -1,33 +1,61 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useCallback } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import type { GenerateCaseRequest, Case } from '../types'
 import { useGameProgress } from '../hooks/useGameProgress'
+import { useApiConfig } from '../hooks/useApiConfig'
+import { ApiKeySettings } from '../components/ApiKeySettings'
+
+// 预设关键词标签
+const PRESET_KEYWORDS = [
+  { label: '游轮', value: '游轮 暴风雨 海上' },
+  { label: '古堡', value: '古堡 贵族 遗产' },
+  { label: '雪山', value: '雪山 暴风雪 度假村' },
+  { label: '医院', value: '医院 手术室 医生' },
+  { label: '学校', value: '学校 校园 教师' },
+  { label: '剧院', value: '剧院 演员 首演' }
+]
 
 export default function CreateCasePage() {
   const navigate = useNavigate()
   const { saveCaseData } = useGameProgress()
+  const { apiConfig, saveApiConfig, deleteApiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
   const [keywords, setKeywords] = useState('')
   const [difficulty, setDifficulty] = useState(2)
   const [numSuspects, setNumSuspects] = useState(4)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [generatingStage, setGeneratingStage] = useState('')
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (!keywords.trim()) {
       setError('请输入至少一个关键词')
       return
     }
 
+    if (keywords.trim().length < 2) {
+      setError('关键词至少需要2个字符')
+      return
+    }
+
+    if (keywords.trim().length > 100) {
+      setError('关键词最多100个字符')
+      return
+    }
+
     setIsGenerating(true)
     setError(null)
+    setGeneratingStage('正在连接AI服务...')
 
     try {
       const request: GenerateCaseRequest = {
         keywords: keywords.trim(),
         difficulty,
-        numSuspects
+        numSuspects,
+        apiKey: apiConfig?.apiKey,
+        apiProvider: apiConfig?.apiProvider
       }
 
+      setGeneratingStage('正在构思案件场景...')
       const response = await fetch('/api/case/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -36,31 +64,64 @@ export default function CreateCasePage() {
 
       const data = await response.json()
 
+      if (!response.ok) {
+        throw new Error(data.message || '生成失败，请重试')
+      }
+
       if (data.success && data.data.caseId) {
+        setGeneratingStage('正在获取案件详情...')
         // 获取并保存案件数据到localStorage
         const caseResponse = await fetch(`/api/case/${data.data.caseId}`)
+        if (!caseResponse.ok) {
+          throw new Error('获取案件详情失败')
+        }
         const caseData = await caseResponse.json()
         if (caseData.success) {
           saveCaseData(caseData.data as Case)
+          navigate(`/game/${data.data.caseId}`)
+        } else {
+          throw new Error(caseData.message || '获取案件详情失败')
         }
-        navigate(`/game/${data.data.caseId}`)
       } else {
-        setError(data.message || '生成失败，请重试')
+        throw new Error(data.message || '生成失败，请重试')
       }
     } catch (err) {
-      setError('网络错误，请检查后端服务是否启动')
+      setError(err instanceof Error ? err.message : '网络错误，请检查后端服务是否启动')
       console.error(err)
     } finally {
       setIsGenerating(false)
+      setGeneratingStage('')
     }
+  }, [keywords, difficulty, numSuspects, apiConfig, saveCaseData, navigate])
+
+  // 点击预设标签
+  const handlePresetClick = (value: string) => {
+    setKeywords(value)
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
       <div className="w-full max-w-lg bg-slate-800 rounded-xl p-8">
-        <h1 className="text-3xl font-bold text-primary-400 mb-6 text-center">
-          创建新案件
-        </h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold text-primary-400">
+            创建新案件
+          </h1>
+          <Link
+            to="/"
+            className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 bg-slate-700 rounded"
+          >
+            返回首页
+          </Link>
+        </div>
+
+        {/* API Key配置 */}
+        <ApiKeySettings
+          currentConfig={apiConfig}
+          onSave={saveApiConfig}
+          onDelete={deleteApiConfig}
+          displayKey={getDisplayApiKey()}
+          hasApiKey={hasApiKey}
+        />
 
         <div className="space-y-6">
           {/* 难度选择 */}
@@ -110,15 +171,50 @@ export default function CreateCasePage() {
               onChange={(e) => setKeywords(e.target.value)}
               placeholder="输入场景、主题等关键词，如：游轮 暴风雨 遗产"
               className="w-full h-24 bg-slate-700 text-slate-200 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+              disabled={isGenerating}
             />
             <p className="text-slate-500 text-sm mt-1">
-              提示：多个关键词用空格分隔
+              提示：多个关键词用空格分隔 ({keywords.length}/100字)
             </p>
+          </div>
+
+          {/* 预设关键词标签 */}
+          <div>
+            <label className="block text-slate-300 mb-2 text-sm">快速选择</label>
+            <div className="flex flex-wrap gap-2">
+              {PRESET_KEYWORDS.map((preset) => (
+                <button
+                  key={preset.label}
+                  onClick={() => handlePresetClick(preset.value)}
+                  disabled={isGenerating}
+                  className={`px-3 py-1 bg-slate-700 text-slate-400 rounded-full text-sm hover:bg-slate-600 hover:text-slate-200 transition-colors disabled:opacity-50 ${
+                    keywords === preset.value ? 'ring-2 ring-primary-500 text-primary-400' : ''
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* 错误提示 */}
           {error && (
-            <div className="text-red-400 text-center text-sm">{error}</div>
+            <div className="text-red-400 text-center text-sm bg-red-900/20 rounded-lg p-2">
+              {error}
+            </div>
+          )}
+
+          {/* 生成进度提示 */}
+          {isGenerating && generatingStage && (
+            <div className="text-primary-400 text-center text-sm">
+              <span className="inline-flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                {generatingStage}
+              </span>
+            </div>
           )}
 
           {/* 生成按钮 */}

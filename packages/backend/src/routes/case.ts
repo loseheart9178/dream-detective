@@ -6,13 +6,19 @@ const router = Router()
 // 生成案件
 router.post('/generate', async (req, res) => {
   try {
-    const { keywords, difficulty, numSuspects } = req.body
-    const result = await generateCase({ keywords, difficulty, numSuspects })
+    const { keywords, difficulty, numSuspects, apiKey, apiProvider } = req.body
+    const result = await generateCase({
+      keywords,
+      difficulty,
+      numSuspects,
+      apiKey,
+      apiProvider
+    })
     res.json({ success: true, data: result })
   } catch (error) {
     console.error('生成案件失败:', error)
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error instanceof Error ? error.message : '生成案件失败'
     })
   }

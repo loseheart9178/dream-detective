@@ -114,13 +114,15 @@ export async function generateCase(params: {
   keywords: string
   difficulty: number
   numSuspects: number
+  apiKey?: string
+  apiProvider?: 'openai' | 'dashscope'
 }): Promise<{ caseId: string }> {
-  const { keywords, difficulty, numSuspects } = params
-  
+  const { keywords, difficulty, numSuspects, apiKey, apiProvider } = params
+
   // 调用AI服务生成案件
-  const caseData = await generateCaseWithAI(keywords, difficulty, numSuspects)
+  const caseData = await generateCaseWithAI(keywords, difficulty, numSuspects, apiKey, apiProvider)
   const caseId = uuidv4()
-  
+
   const newCase: Case = {
     id: caseId,
     ...caseData,
@@ -128,7 +130,7 @@ export async function generateCase(params: {
     keywords,
     createdAt: new Date().toISOString()
   }
-  
+
   cases.set(caseId, newCase)
   return { caseId }
 }
@@ -337,20 +339,24 @@ ${killerInfo}
 
 // AI生成案件
 async function generateCaseWithAI(
-  keywords: string, 
-  difficulty: number, 
-  numSuspects: number
+  keywords: string,
+  difficulty: number,
+  numSuspects: number,
+  apiKey?: string,
+  apiProvider?: 'openai' | 'dashscope'
 ): Promise<GeneratedCaseData> {
-  // 检查是否配置了API
-  const apiKey = process.env.OPENAI_API_KEY || process.env.DASHSCOPE_API_KEY
-  
-  if (!apiKey || apiKey === 'your_openai_api_key_here' || apiKey === 'your_dashscope_api_key_here') {
+  // 检查是否配置了API（前端传入或环境变量）
+  const hasApiKey = apiKey ||
+    (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your_openai_api_key_here') ||
+    (process.env.DASHSCOPE_API_KEY && process.env.DASHSCOPE_API_KEY !== 'your_dashscope_api_key_here')
+
+  if (!hasApiKey) {
     // 返回示例案件用于开发测试
     return generateSampleCase(numSuspects)
   }
 
   // 调用真实AI API
-  return generateCaseWithRealAI(keywords, difficulty, numSuspects)
+  return generateCaseWithRealAI(keywords, difficulty, numSuspects, apiKey, apiProvider)
 }
 
 // 示例案件 (用于开发测试) - 随机选择模板
@@ -380,53 +386,127 @@ function generateSampleCase(numSuspects: number): GeneratedCaseData {
 
 // 真实AI生成
 async function generateCaseWithRealAI(
-  keywords: string, 
-  difficulty: number, 
-  numSuspects: number
+  keywords: string,
+  difficulty: number,
+  numSuspects: number,
+  apiKey?: string,
+  apiProvider?: 'openai' | 'dashscope'
 ): Promise<GeneratedCaseData> {
   const prompt = buildPrompt(keywords, difficulty, numSuspects)
-  
+
+  // 优先使用前端传入的API Key，否则使用环境变量
+  const openaiKey = apiKey && apiProvider === 'openai' ? apiKey : process.env.OPENAI_API_KEY
+  const dashscopeKey = apiKey && apiProvider === 'dashscope' ? apiKey : process.env.DASHSCOPE_API_KEY
+
   // 尝试OpenAI
-  if (process.env.OPENAI_API_KEY) {
+  if (openaiKey && openaiKey !== 'your_openai_api_key_here') {
+    return await callOpenAI(prompt, openaiKey, numSuspects)
+  }
+
+  // 尝试通义千问
+  if (dashscopeKey && dashscopeKey !== 'your_dashscope_api_key_here') {
+    return await callDashscope(prompt, dashscopeKey, numSuspects)
+  }
+
+  throw new Error('未配置AI API密钥')
+}
+
+// 调用OpenAI API（带超时和重试）
+async function callOpenAI(prompt: string, apiKey: string, numSuspects: number, retries = 3): Promise<GeneratedCaseData> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 90000) // 90秒超时
+
+  try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.8
-      })
+      }),
+      signal: controller.signal
     })
-    
+
+    clearTimeout(timeout)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(`OpenAI API错误: ${response.status} - ${errorData.error?.message || '未知错误'}`)
+    }
+
     const data = await response.json()
+
+    if (!data.choices?.[0]?.message?.content) {
+      throw new Error('OpenAI API返回格式错误')
+    }
+
     const content = data.choices[0].message.content
     return parseAIResponse(content, numSuspects)
+  } catch (error: unknown) {
+    clearTimeout(timeout)
+
+    // 网络错误或超时，尝试重试
+    if (retries > 0 && (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch')))) {
+      console.log(`OpenAI请求失败，剩余重试次数: ${retries - 1}`)
+      await new Promise(resolve => setTimeout(resolve, 2000)) // 等待2秒后重试
+      return callOpenAI(prompt, apiKey, numSuspects, retries - 1)
+    }
+
+    throw error
   }
-  
-  // 尝试通义千问
-  if (process.env.DASHSCOPE_API_KEY) {
+}
+
+// 调用通义千问API（带超时和重试）
+async function callDashscope(prompt: string, apiKey: string, numSuspects: number, retries = 3): Promise<GeneratedCaseData> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 90000) // 90秒超时
+
+  try {
     const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DASHSCOPE_API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: 'qwen-turbo',
         input: { prompt },
         parameters: { temperature: 0.8 }
-      })
+      }),
+      signal: controller.signal
     })
-    
+
+    clearTimeout(timeout)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(`通义千问API错误: ${response.status} - ${errorData.message || '未知错误'}`)
+    }
+
     const data = await response.json()
+
+    if (!data.output?.text) {
+      throw new Error('通义千问API返回格式错误')
+    }
+
     const content = data.output.text
     return parseAIResponse(content, numSuspects)
+  } catch (error: unknown) {
+    clearTimeout(timeout)
+
+    // 网络错误或超时，尝试重试
+    if (retries > 0 && (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch')))) {
+      console.log(`通义千问请求失败，剩余重试次数: ${retries - 1}`)
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      return callDashscope(prompt, apiKey, numSuspects, retries - 1)
+    }
+
+    throw error
   }
-  
-  throw new Error('未配置AI API密钥')
 }
 
 function buildPrompt(keywords: string, difficulty: number, numSuspects: number): string {
