@@ -184,6 +184,52 @@ export default function GamePage() {
     }
   }
 
+  // 重新生成案件
+  const handleRegenerate = async (saveCurrent: boolean) => {
+    if (!caseData) return
+
+    setRegenerating(true)
+    try {
+      // 如果需要保存当前案件，标记为已保存
+      if (saveCurrent && caseId) {
+        // 当前案件已自动保存，无需额外操作
+      } else {
+        // 删除当前进度
+        deleteProgress(caseId!)
+      }
+
+      // 生成新案件
+      const response = await fetch('/api/case/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keywords: caseData.keywords,
+          difficulty: caseData.difficulty,
+          numSuspects: caseData.suspects.length
+        })
+      })
+
+      const data = await response.json()
+      if (data.success && data.data.caseId) {
+        // 获取并保存新案件数据到localStorage
+        const caseResponse = await fetch(`/api/case/${data.data.caseId}`)
+        const caseResult = await caseResponse.json()
+        if (caseResult.success) {
+          saveCaseData(caseResult.data)
+        }
+        navigate(`/game/${data.data.caseId}`)
+      } else {
+        alert('生成失败，请重试')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('网络错误')
+    } finally {
+      setRegenerating(false)
+      setShowRegenerateModal(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -455,46 +501,6 @@ export default function GamePage() {
       )}
     </div>
   )
-
-  // 重新生成案件
-  async function handleRegenerate(saveCurrent: boolean) {
-    if (!caseData) return
-
-    setRegenerating(true)
-    try {
-      // 如果需要保存当前案件，标记为已保存
-      if (saveCurrent && caseId) {
-        // 当前案件已自动保存，无需额外操作
-      } else {
-        // 删除当前进度
-        deleteProgress(caseId!)
-      }
-
-      // 生成新案件
-      const response = await fetch('/api/case/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keywords: caseData.keywords,
-          difficulty: caseData.difficulty,
-          numSuspects: caseData.suspects.length
-        })
-      })
-
-      const data = await response.json()
-      if (data.success && data.data.caseId) {
-        navigate(`/game/${data.data.caseId}`)
-      } else {
-        alert('生成失败，请重试')
-      }
-    } catch (err) {
-      console.error(err)
-      alert('网络错误')
-    } finally {
-      setRegenerating(false)
-      setShowRegenerateModal(false)
-    }
-  }
 }
 
 function SubmitForm({
