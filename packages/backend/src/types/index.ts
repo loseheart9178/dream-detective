@@ -58,13 +58,13 @@ export interface GenerateCaseRequest {
   model?: string
 }
 
-export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'custom'
+export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local-openai' | 'local-anthropic'
 
 export interface ApiConfig {
   apiProvider: ApiProvider
   apiKey: string
-  apiUrl?: string
-  model?: string
+  apiUrl: string
+  model: string
 }
 
 export interface SubmitAnswerRequest {

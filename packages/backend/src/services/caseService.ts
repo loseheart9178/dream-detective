@@ -56,7 +56,7 @@ const API_PROVIDERS: Record<ApiProvider, {
   },
   claude: {
     baseUrl: 'https://api.anthropic.com/v1/messages',
-    defaultModel: 'claude-3-opus-20240229',
+    defaultModel: 'claude-sonnet-4-20250514',
     headers: (key) => ({
       'Content-Type': 'application/json',
       'x-api-key': key,
@@ -71,7 +71,7 @@ const API_PROVIDERS: Record<ApiProvider, {
   },
   zhipu: {
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-    defaultModel: 'glm-4',
+    defaultModel: 'glm-4-plus',
     headers: (key) => ({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${key}`
@@ -97,19 +97,34 @@ const API_PROVIDERS: Record<ApiProvider, {
     }),
     parseResponse: (data) => data.choices?.[0]?.message?.content || ''
   },
-  custom: {
-    baseUrl: '',
+  'local-openai': {
+    baseUrl: 'http://localhost:11434/v1/chat/completions',
     defaultModel: '',
     headers: (key) => ({
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`
+      'Authorization': key ? `Bearer ${key}` : 'Bearer dummy'
     }),
     buildBody: (model, prompt) => ({
-      model: model || 'default',
+      model: model || 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.8
     }),
-    parseResponse: (data) => data.choices?.[0]?.message?.content || data.output?.text || data.content?.[0]?.text || ''
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  },
+  'local-anthropic': {
+    baseUrl: 'http://localhost:8080/v1/messages',
+    defaultModel: '',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'x-api-key': key || 'dummy',
+      'anthropic-version': '2023-06-01'
+    }),
+    buildBody: (model, prompt) => ({
+      model: model || 'claude-3-5-sonnet-20241022',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: prompt }]
+    }),
+    parseResponse: (data) => data.content?.[0]?.text || ''
   }
 }
 

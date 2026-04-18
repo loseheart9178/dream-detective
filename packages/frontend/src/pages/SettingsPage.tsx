@@ -26,7 +26,7 @@ export default function SettingsPage() {
 
   // 处理保存
   const handleSave = () => {
-    if (!apiKey.trim()) {
+    if (!apiKey.trim() && !isLocalProvider) {
       alert('请输入API密钥')
       return
     }
@@ -34,8 +34,8 @@ export default function SettingsPage() {
     const config: ApiConfig = {
       apiProvider: provider,
       apiKey: apiKey.trim(),
-      apiUrl: API_PROVIDERS[provider].allowCustomUrl ? apiUrl.trim() : API_PROVIDERS[provider].baseUrl,
-      model: model.trim()
+      apiUrl: (currentConfig.allowCustomUrl || isLocalProvider) ? apiUrl.trim() : currentConfig.baseUrl,
+      model: model.trim() || currentConfig.models[0]?.id || ''
     }
 
     saveApiConfig(config)
@@ -45,8 +45,13 @@ export default function SettingsPage() {
 
   // 测试连接
   const handleTest = async () => {
-    if (!apiKey.trim()) {
+    if (!apiKey.trim() && !isLocalProvider) {
       alert('请先输入API密钥')
+      return
+    }
+
+    if (!model.trim()) {
+      alert('请先输入模型名称')
       return
     }
 
@@ -55,8 +60,8 @@ export default function SettingsPage() {
 
     try {
       const config = API_PROVIDERS[provider]
-      const url = config.allowCustomUrl ? apiUrl : config.baseUrl
-      const testModel = model || config.models[0]?.id
+      const url = (config.allowCustomUrl || isLocalProvider) ? apiUrl : config.baseUrl
+      const testModel = model.trim()
 
       // 根据不同供应商构建不同的请求
       let response: Response
@@ -75,13 +80,13 @@ export default function SettingsPage() {
             parameters: { max_tokens: 10 }
           })
         })
-      } else if (provider === 'claude') {
-        // Claude特殊格式
+      } else if (provider === 'claude' || provider === 'local-anthropic') {
+        // Claude/本地Anthropic特殊格式
         response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey.trim(),
+            'x-api-key': apiKey.trim() || 'dummy',
             'anthropic-version': '2023-06-01'
           },
           body: JSON.stringify({
@@ -91,12 +96,12 @@ export default function SettingsPage() {
           })
         })
       } else {
-        // OpenAI兼容格式 (OpenAI, DeepSeek, 智谱, Moonshot, 自定义)
+        // OpenAI兼容格式 (OpenAI, DeepSeek, 智谱, Moonshot, 本地OpenAI)
         response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey.trim()}`
+            'Authorization': `Bearer ${apiKey.trim() || 'dummy'}`
           },
           body: JSON.stringify({
             model: testModel,
@@ -136,6 +141,13 @@ export default function SettingsPage() {
   }
 
   const currentConfig = API_PROVIDERS[provider]
+
+  // 判断是否为本地部署类型
+  const isLocalProvider = provider === 'local-openai' || provider === 'local-anthropic'
+
+  // 判断是否允许自定义URL和模型
+  const canEditUrl = currentConfig.allowCustomUrl || isLocalProvider
+  const canEditModel = currentConfig.allowCustomModel || isLocalProvider
 
   return (
     <div className="min-h-screen p-8">
@@ -180,28 +192,33 @@ export default function SettingsPage() {
             </div>
 
             {/* API地址 */}
-            {currentConfig.allowCustomUrl && (
+            {(currentConfig.allowCustomUrl || isLocalProvider) && (
               <div>
                 <label className="block text-slate-300 mb-2 text-sm">API地址</label>
                 <input
                   type="text"
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder="https://api.example.com/v1/chat/completions"
+                  placeholder={isLocalProvider ? 'http://localhost:11434/v1/chat/completions' : 'https://api.example.com/v1/chat/completions'}
                   className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
+                {isLocalProvider && (
+                  <p className="text-slate-500 text-xs mt-1">
+                    本地部署请填写完整地址，如 http://localhost:11434/v1/chat/completions
+                  </p>
+                )}
               </div>
             )}
 
             {/* 模型选择 */}
             <div>
               <label className="block text-slate-300 mb-2 text-sm">模型</label>
-              {currentConfig.allowCustomUrl ? (
+              {(currentConfig.allowCustomModel || isLocalProvider) ? (
                 <input
                   type="text"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  placeholder="请输入模型名称"
+                  placeholder="请输入模型名称，如 gpt-4o、qwen-max 等"
                   className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               ) : (
@@ -270,7 +287,7 @@ export default function SettingsPage() {
             <div className="flex gap-2 pt-2">
               <button
                 onClick={handleTest}
-                disabled={testing || !apiKey.trim()}
+                disabled={testing || (!apiKey.trim() && !isLocalProvider) || !model.trim()}
                 className="flex-1 py-2 bg-slate-700 text-slate-300 rounded-lg text-sm hover:bg-slate-600 disabled:opacity-50"
               >
                 {testing ? '测试中...' : '测试连接'}

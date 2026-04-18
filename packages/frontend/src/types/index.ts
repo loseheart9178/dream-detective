@@ -80,14 +80,38 @@ export interface GenerateCaseRequest {
 }
 
 // API供应商类型
-export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'custom'
+export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local-openai' | 'local-anthropic'
 
 // API配置类型
 export interface ApiConfig {
   apiProvider: ApiProvider
   apiKey: string
-  apiUrl?: string
-  model?: string
+  apiUrl: string
+  model: string
+}
+
+// 本地部署配置
+export const LOCAL_PROVIDERS: Record<string, {
+  name: string
+  displayName: string
+  defaultPort: string
+  endpoint: string
+  authHeader: string
+}> = {
+  'local-openai': {
+    name: '本地OpenAI兼容',
+    displayName: '本地部署 (OpenAI兼容)',
+    defaultPort: '11434',
+    endpoint: '/v1/chat/completions',
+    authHeader: 'Bearer'
+  },
+  'local-anthropic': {
+    name: '本地Anthropic兼容',
+    displayName: '本地部署 (Anthropic兼容)',
+    defaultPort: '8080',
+    endpoint: '/v1/messages',
+    authHeader: 'x-api-key'
+  }
 }
 
 // 预设供应商配置
@@ -99,6 +123,7 @@ export const API_PROVIDERS: Record<ApiProvider, {
   keyPlaceholder: string
   docsUrl: string
   allowCustomUrl: boolean
+  allowCustomModel: boolean
 }> = {
   openai: {
     name: 'OpenAI',
@@ -111,7 +136,8 @@ export const API_PROVIDERS: Record<ApiProvider, {
     ],
     keyPlaceholder: 'sk-proj-...',
     docsUrl: 'https://platform.openai.com/api-keys',
-    allowCustomUrl: false
+    allowCustomUrl: false,
+    allowCustomModel: false
   },
   dashscope: {
     name: '通义千问',
@@ -124,7 +150,8 @@ export const API_PROVIDERS: Record<ApiProvider, {
     ],
     keyPlaceholder: '请输入Dashscope API Key',
     docsUrl: 'https://dashscope.console.aliyun.com/apiKey',
-    allowCustomUrl: false
+    allowCustomUrl: false,
+    allowCustomModel: false
   },
   deepseek: {
     name: 'DeepSeek',
@@ -136,7 +163,8 @@ export const API_PROVIDERS: Record<ApiProvider, {
     ],
     keyPlaceholder: 'sk-...',
     docsUrl: 'https://platform.deepseek.com/api_keys',
-    allowCustomUrl: false
+    allowCustomUrl: false,
+    allowCustomModel: false
   },
   claude: {
     name: 'Claude',
@@ -149,7 +177,8 @@ export const API_PROVIDERS: Record<ApiProvider, {
     ],
     keyPlaceholder: 'sk-ant-...',
     docsUrl: 'https://console.anthropic.com/settings/keys',
-    allowCustomUrl: false
+    allowCustomUrl: false,
+    allowCustomModel: false
   },
   zhipu: {
     name: '智谱AI',
@@ -161,7 +190,8 @@ export const API_PROVIDERS: Record<ApiProvider, {
     ],
     keyPlaceholder: '请输入智谱API Key',
     docsUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
-    allowCustomUrl: false
+    allowCustomUrl: false,
+    allowCustomModel: false
   },
   moonshot: {
     name: 'Moonshot',
@@ -173,18 +203,32 @@ export const API_PROVIDERS: Record<ApiProvider, {
     ],
     keyPlaceholder: 'sk-...',
     docsUrl: 'https://platform.moonshot.cn/console/api-keys',
-    allowCustomUrl: false
+    allowCustomUrl: false,
+    allowCustomModel: false
   },
-  custom: {
-    name: '自定义',
-    displayName: '自定义 (OpenAI兼容)',
-    baseUrl: '',
+  'local-openai': {
+    name: '本地OpenAI兼容',
+    displayName: '本地部署 (OpenAI兼容)',
+    baseUrl: 'http://localhost:11434/v1/chat/completions',
     models: [
-      { id: 'custom', name: '自定义模型', default: true }
+      { id: '', name: '请输入模型名称', default: true }
     ],
-    keyPlaceholder: '请输入API Key',
+    keyPlaceholder: '请输入API Key（可留空）',
     docsUrl: '',
-    allowCustomUrl: true
+    allowCustomUrl: true,
+    allowCustomModel: true
+  },
+  'local-anthropic': {
+    name: '本地Anthropic兼容',
+    displayName: '本地部署 (Anthropic兼容)',
+    baseUrl: 'http://localhost:8080/v1/messages',
+    models: [
+      { id: '', name: '请输入模型名称', default: true }
+    ],
+    keyPlaceholder: '请输入API Key（可留空）',
+    docsUrl: '',
+    allowCustomUrl: true,
+    allowCustomModel: true
   }
 }
 

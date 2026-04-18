@@ -110,7 +110,8 @@ export default function CreateCasePage() {
       claude: 'Claude',
       zhipu: '智谱AI',
       moonshot: 'Moonshot',
-      custom: '自定义'
+      'local-openai': '本地OpenAI',
+      'local-anthropic': '本地Anthropic'
     }
     return providers[apiConfig.apiProvider] || apiConfig.apiProvider
   }
