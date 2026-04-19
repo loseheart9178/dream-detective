@@ -14,7 +14,7 @@ const API_PROVIDERS: Record<ApiProvider, {
 }> = {
   openai: {
     baseUrl: 'https://api.openai.com/v1/chat/completions',
-    defaultModel: 'gpt-4o',
+    defaultModel: 'gpt-4o-mini',
     headers: (key) => ({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${key}`
@@ -27,18 +27,18 @@ const API_PROVIDERS: Record<ApiProvider, {
     parseResponse: (data) => data.choices?.[0]?.message?.content || ''
   },
   dashscope: {
-    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
-    defaultModel: 'qwen-turbo',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    defaultModel: 'qwen-plus',
     headers: (key) => ({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${key}`
     }),
     buildBody: (model, prompt) => ({
       model,
-      input: { prompt },
-      parameters: { temperature: 0.8 }
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
     }),
-    parseResponse: (data) => data.output?.text || ''
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
   },
   deepseek: {
     baseUrl: 'https://api.deepseek.com/v1/chat/completions',
@@ -56,7 +56,7 @@ const API_PROVIDERS: Record<ApiProvider, {
   },
   claude: {
     baseUrl: 'https://api.anthropic.com/v1/messages',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-3-5-haiku-latest',
     headers: (key) => ({
       'Content-Type': 'application/json',
       'x-api-key': key,
@@ -71,7 +71,7 @@ const API_PROVIDERS: Record<ApiProvider, {
   },
   zhipu: {
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-    defaultModel: 'glm-4-plus',
+    defaultModel: 'glm-4-flash',
     headers: (key) => ({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${key}`
@@ -85,7 +85,7 @@ const API_PROVIDERS: Record<ApiProvider, {
   },
   moonshot: {
     baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
-    defaultModel: 'moonshot-v1-8k',
+    defaultModel: 'kimi-latest',
     headers: (key) => ({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${key}`

@@ -142,23 +142,23 @@ export const API_PROVIDERS: Record<ApiProvider, {
     name: 'OpenAI',
     displayName: 'OpenAI (GPT-4o)',
     baseUrl: 'https://api.openai.com/v1/chat/completions',
-    defaultModel: 'gpt-4o',
+    defaultModel: 'gpt-4o-mini',
     keyPlaceholder: 'sk-proj-...',
     docsUrl: 'https://platform.openai.com/api-keys',
-    allowCustomUrl: false,
+    allowCustomUrl: true,
     protocol: 'openai',
-    modelSuggestions: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo']
+    modelSuggestions: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'gpt-4.1-mini']
   },
   dashscope: {
     name: '通义千问',
     displayName: '通义千问 (阿里云)',
-    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
-    defaultModel: 'qwen-max',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    defaultModel: 'qwen-plus',
     keyPlaceholder: '请输入Dashscope API Key',
     docsUrl: 'https://dashscope.console.aliyun.com/apiKey',
-    allowCustomUrl: false,
-    protocol: 'dashscope',
-    modelSuggestions: ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen-long']
+    allowCustomUrl: true,
+    protocol: 'openai',
+    modelSuggestions: ['qwen-plus', 'qwen-turbo', 'qwen3-235b-a22b', 'qwen3-32b']
   },
   deepseek: {
     name: 'DeepSeek',
@@ -167,42 +167,42 @@ export const API_PROVIDERS: Record<ApiProvider, {
     defaultModel: 'deepseek-chat',
     keyPlaceholder: 'sk-...',
     docsUrl: 'https://platform.deepseek.com/api_keys',
-    allowCustomUrl: false,
+    allowCustomUrl: true,
     protocol: 'openai',
-    modelSuggestions: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder']
+    modelSuggestions: ['deepseek-chat', 'deepseek-reasoner']
   },
   claude: {
     name: 'Claude',
     displayName: 'Claude (Anthropic)',
     baseUrl: 'https://api.anthropic.com/v1/messages',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-3-5-haiku-latest',
     keyPlaceholder: 'sk-ant-...',
     docsUrl: 'https://console.anthropic.com/settings/keys',
-    allowCustomUrl: false,
+    allowCustomUrl: true,
     protocol: 'anthropic',
-    modelSuggestions: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest']
+    modelSuggestions: ['claude-3-5-haiku-latest', 'claude-sonnet-4-20250514', 'claude-opus-4-20250514']
   },
   zhipu: {
     name: '智谱AI',
     displayName: '智谱AI (GLM)',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-    defaultModel: 'glm-4-plus',
+    defaultModel: 'glm-4-flash',
     keyPlaceholder: '请输入智谱API Key',
     docsUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
-    allowCustomUrl: false,
+    allowCustomUrl: true,
     protocol: 'openai',
-    modelSuggestions: ['glm-4-plus', 'glm-4-flash', 'glm-4', 'glm-4-air']
+    modelSuggestions: ['glm-4-flash', 'glm-4-airx', 'glm-4-plus']
   },
   moonshot: {
     name: 'Moonshot',
     displayName: 'Moonshot (月之暗面)',
     baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
-    defaultModel: 'moonshot-v1-8k',
+    defaultModel: 'kimi-latest',
     keyPlaceholder: 'sk-...',
     docsUrl: 'https://platform.moonshot.cn/console/api-keys',
-    allowCustomUrl: false,
+    allowCustomUrl: true,
     protocol: 'openai',
-    modelSuggestions: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
+    modelSuggestions: ['kimi-latest', 'moonshot-v1-8k', 'moonshot-v1-32k']
   },
   local: {
     name: '本地部署',
@@ -213,7 +213,7 @@ export const API_PROVIDERS: Record<ApiProvider, {
     docsUrl: '',
     allowCustomUrl: true,
     protocol: 'openai',
-    modelSuggestions: ['llama3', 'qwen2', 'mistral', 'codellama', 'deepseek-coder']
+    modelSuggestions: ['llama3.1', 'qwen2.5', 'deepseek-r1', 'mistral']
   }
 }
 

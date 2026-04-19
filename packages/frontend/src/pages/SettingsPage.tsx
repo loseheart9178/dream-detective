@@ -57,7 +57,7 @@ export default function SettingsPage() {
     const config: ApiConfig = {
       apiProvider: provider,
       apiKey: apiKey.trim(),
-      apiUrl: isLocalProvider ? apiUrl.trim() : currentConfig.baseUrl,
+      apiUrl: apiUrl.trim() || currentConfig.baseUrl,
       model: model.trim(),
       protocol: isLocalProvider ? protocol : currentConfig.protocol
     }
@@ -84,7 +84,7 @@ export default function SettingsPage() {
 
     try {
       const testProtocol = isLocalProvider ? protocol : currentConfig.protocol
-      const url = isLocalProvider ? apiUrl : currentConfig.baseUrl
+      const url = apiUrl.trim() || currentConfig.baseUrl
       const testModel = model.trim()
 
       let response: Response
@@ -230,22 +230,27 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* API地址 - 本地部署可编辑 */}
-            {isLocalProvider && (
-              <div>
-                <label className="block text-slate-300 mb-2 text-sm">API地址</label>
-                <input
-                  type="text"
-                  value={apiUrl}
-                  onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder={`http://localhost:${API_PROTOCOLS[protocol].defaultPort}${API_PROTOCOLS[protocol].defaultEndpoint}`}
-                  className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+            {/* API地址 - 所有供应商都支持自定义 */}
+            <div>
+              <label className="block text-slate-300 mb-2 text-sm">API地址</label>
+              <input
+                type="text"
+                value={apiUrl}
+                onChange={(e) => setApiUrl(e.target.value)}
+                placeholder={currentConfig.baseUrl}
+                className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              {isLocalProvider && (
                 <p className="text-slate-500 text-xs mt-1">
                   本地部署请填写完整地址，如 Ollama: http://localhost:11434/v1/chat/completions
                 </p>
-              </div>
-            )}
+              )}
+              {!isLocalProvider && (
+                <p className="text-slate-500 text-xs mt-1">
+                  默认地址: {currentConfig.baseUrl}
+                </p>
+              )}
+            </div>
 
             {/* 模型名称 - 所有供应商都支持自定义 */}
             <div>
