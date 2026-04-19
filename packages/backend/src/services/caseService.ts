@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider } from '../types'
+import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider, ApiProtocol } from '../types'
 
 // 类型定义
 type GeneratedCaseData = Omit<Case, 'id' | 'difficulty' | 'keywords' | 'createdAt'>
@@ -97,7 +97,7 @@ const API_PROVIDERS: Record<ApiProvider, {
     }),
     parseResponse: (data) => data.choices?.[0]?.message?.content || ''
   },
-  'local-openai': {
+  local: {
     baseUrl: 'http://localhost:11434/v1/chat/completions',
     defaultModel: '',
     headers: (key) => ({
@@ -110,10 +110,28 @@ const API_PROVIDERS: Record<ApiProvider, {
       temperature: 0.8
     }),
     parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  }
+}
+
+// API协议配置（用于本地部署）
+const API_PROTOCOLS: Record<ApiProtocol, {
+  headers: (key: string) => Record<string, string>
+  buildBody: (model: string, prompt: string) => object
+  parseResponse: (data: any) => string
+}> = {
+  openai: {
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': key ? `Bearer ${key}` : 'Bearer dummy'
+    }),
+    buildBody: (model, prompt) => ({
+      model: model || 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
   },
-  'local-anthropic': {
-    baseUrl: 'http://localhost:8080/v1/messages',
-    defaultModel: '',
+  anthropic: {
     headers: (key) => ({
       'Content-Type': 'application/json',
       'x-api-key': key || 'dummy',
@@ -125,6 +143,18 @@ const API_PROVIDERS: Record<ApiProvider, {
       messages: [{ role: 'user', content: prompt }]
     }),
     parseResponse: (data) => data.content?.[0]?.text || ''
+  },
+  dashscope: {
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key || 'dummy'}`
+    }),
+    buildBody: (model, prompt) => ({
+      model: model || 'qwen-turbo',
+      input: { prompt },
+      parameters: { temperature: 0.8 }
+    }),
+    parseResponse: (data) => data.output?.text || ''
   }
 }
 
@@ -242,11 +272,12 @@ export async function generateCase(params: {
   apiProvider?: ApiProvider
   apiUrl?: string
   model?: string
+  protocol?: ApiProtocol
 }): Promise<{ caseId: string }> {
-  const { keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model } = params
+  const { keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model, protocol } = params
 
   // 调用AI服务生成案件
-  const caseData = await generateCaseWithAI(keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model)
+  const caseData = await generateCaseWithAI(keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model, protocol)
   const caseId = uuidv4()
 
   const newCase: Case = {
@@ -471,7 +502,8 @@ async function generateCaseWithAI(
   apiKey?: string,
   apiProvider?: ApiProvider,
   apiUrl?: string,
-  model?: string
+  model?: string,
+  protocol?: ApiProtocol
 ): Promise<GeneratedCaseData> {
   // 检查是否配置了API（前端传入或环境变量）
   const hasApiKey = apiKey ||
@@ -484,7 +516,7 @@ async function generateCaseWithAI(
   }
 
   // 调用真实AI API
-  return generateCaseWithRealAI(keywords, difficulty, numSuspects, apiKey, apiProvider || 'openai', apiUrl, model)
+  return generateCaseWithRealAI(keywords, difficulty, numSuspects, apiKey, apiProvider || 'openai', apiUrl, model, protocol)
 }
 
 // 示例案件 (用于开发测试) - 随机选择模板
@@ -520,7 +552,8 @@ async function generateCaseWithRealAI(
   apiKey?: string,
   apiProvider: ApiProvider = 'openai',
   apiUrl?: string,
-  model?: string
+  model?: string,
+  protocol?: ApiProtocol
 ): Promise<GeneratedCaseData> {
   const prompt = buildPrompt(keywords, difficulty, numSuspects)
 
@@ -535,12 +568,12 @@ async function generateCaseWithRealAI(
     }
   }
 
-  if (!key) {
+  if (!key && apiProvider !== 'local') {
     throw new Error('未配置AI API密钥')
   }
 
   // 调用统一的API函数
-  return callAIAPI(prompt, key, apiProvider, apiUrl, model, numSuspects)
+  return callAIAPI(prompt, key || '', apiProvider, apiUrl, model, numSuspects, 3, protocol)
 }
 
 // 统一调用AI API（带超时和重试）
@@ -551,11 +584,18 @@ async function callAIAPI(
   customUrl?: string,
   customModel?: string,
   numSuspects: number = 4,
-  retries = 3
+  retries = 3,
+  protocol?: ApiProtocol
 ): Promise<GeneratedCaseData> {
   const config = API_PROVIDERS[provider]
   const url = customUrl || config.baseUrl
   const model = customModel || config.defaultModel
+
+  // 本地部署使用协议配置
+  const protocolConfig = provider === 'local' && protocol ? API_PROTOCOLS[protocol] : null
+  const headers = protocolConfig ? protocolConfig.headers(apiKey) : config.headers(apiKey)
+  const body = protocolConfig ? protocolConfig.buildBody(model, prompt) : config.buildBody(model, prompt)
+  const parseFn = protocolConfig ? protocolConfig.parseResponse : config.parseResponse
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 90000) // 90秒超时
@@ -563,8 +603,8 @@ async function callAIAPI(
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: config.headers(apiKey),
-      body: JSON.stringify(config.buildBody(model, prompt)),
+      headers,
+      body: JSON.stringify(body),
       signal: controller.signal
     })
 
@@ -576,7 +616,7 @@ async function callAIAPI(
     }
 
     const data = await response.json()
-    const content = config.parseResponse(data)
+    const content = parseFn(data)
 
     if (!content) {
       throw new Error(`${provider} API返回格式错误`)
@@ -590,7 +630,7 @@ async function callAIAPI(
     if (retries > 0 && (error instanceof Error && (error.name === 'AbortError' || error.message.includes('fetch')))) {
       console.log(`${provider}请求失败，剩余重试次数: ${retries - 1}`)
       await new Promise(resolve => setTimeout(resolve, 2000))
-      return callAIAPI(prompt, apiKey, provider, customUrl, customModel, numSuspects, retries - 1)
+      return callAIAPI(prompt, apiKey, provider, customUrl, customModel, numSuspects, retries - 1, protocol)
     }
 
     throw error

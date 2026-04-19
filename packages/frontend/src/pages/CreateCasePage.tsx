@@ -53,7 +53,8 @@ export default function CreateCasePage() {
         apiKey: apiConfig?.apiKey,
         apiProvider: apiConfig?.apiProvider,
         apiUrl: apiConfig?.apiUrl,
-        model: apiConfig?.model
+        model: apiConfig?.model,
+        protocol: apiConfig?.protocol
       }
 
       setGeneratingStage('正在构思案件场景...')
@@ -110,8 +111,7 @@ export default function CreateCasePage() {
       claude: 'Claude',
       zhipu: '智谱AI',
       moonshot: 'Moonshot',
-      'local-openai': '本地OpenAI',
-      'local-anthropic': '本地Anthropic'
+      local: '本地部署'
     }
     return providers[apiConfig.apiProvider] || apiConfig.apiProvider
   }

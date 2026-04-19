@@ -6,7 +6,7 @@ const router = Router()
 // 生成案件
 router.post('/generate', async (req, res) => {
   try {
-    const { keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model } = req.body
+    const { keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model, protocol } = req.body
     const result = await generateCase({
       keywords,
       difficulty,
@@ -14,7 +14,8 @@ router.post('/generate', async (req, res) => {
       apiKey,
       apiProvider,
       apiUrl,
-      model
+      model,
+      protocol
     })
     res.json({ success: true, data: result })
   } catch (error) {

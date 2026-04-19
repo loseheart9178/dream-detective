@@ -56,15 +56,20 @@ export interface GenerateCaseRequest {
   apiProvider?: ApiProvider
   apiUrl?: string
   model?: string
+  protocol?: ApiProtocol
 }
 
-export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local-openai' | 'local-anthropic'
+export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local'
+
+// API协议类型
+export type ApiProtocol = 'openai' | 'anthropic' | 'dashscope'
 
 export interface ApiConfig {
   apiProvider: ApiProvider
   apiKey: string
   apiUrl: string
   model: string
+  protocol?: ApiProtocol
 }
 
 export interface SubmitAnswerRequest {

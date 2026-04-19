@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApiConfig } from '../hooks/useApiConfig'
-import { API_PROVIDERS, type ApiProvider, type ApiConfig } from '../types'
+import { API_PROVIDERS, API_PROTOCOLS, type ApiProvider, type ApiConfig, type ApiProtocol } from '../types'
 
 export default function SettingsPage() {
   const navigate = useNavigate()
@@ -11,18 +11,36 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('')
   const [apiUrl, setApiUrl] = useState(apiConfig?.apiUrl || '')
   const [model, setModel] = useState(apiConfig?.model || '')
+  const [protocol, setProtocol] = useState<ApiProtocol>(apiConfig?.protocol || 'openai')
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  // 当供应商切换时，更新默认URL和模型
+  const isLocalProvider = provider === 'local'
+  const currentConfig = API_PROVIDERS[provider]
+
+  // 当供应商切换时，更新默认值
   useEffect(() => {
     const config = API_PROVIDERS[provider]
     if (config) {
-      setApiUrl(config.baseUrl)
-      setModel(config.models.find(m => m.default)?.id || config.models[0]?.id || '')
+      if (provider === 'local') {
+        // 本地部署根据协议类型更新默认URL
+        const protocolConfig = API_PROTOCOLS[protocol]
+        setApiUrl(`http://localhost:${protocolConfig.defaultPort}${protocolConfig.defaultEndpoint}`)
+      } else {
+        setApiUrl(config.baseUrl)
+      }
+      setModel(config.defaultModel)
     }
   }, [provider])
+
+  // 当协议类型切换时，更新本地部署的默认URL
+  useEffect(() => {
+    if (isLocalProvider) {
+      const protocolConfig = API_PROTOCOLS[protocol]
+      setApiUrl(`http://localhost:${protocolConfig.defaultPort}${protocolConfig.defaultEndpoint}`)
+    }
+  }, [protocol, isLocalProvider])
 
   // 处理保存
   const handleSave = () => {
@@ -31,11 +49,17 @@ export default function SettingsPage() {
       return
     }
 
+    if (!model.trim()) {
+      alert('请输入模型名称')
+      return
+    }
+
     const config: ApiConfig = {
       apiProvider: provider,
       apiKey: apiKey.trim(),
-      apiUrl: (currentConfig.allowCustomUrl || isLocalProvider) ? apiUrl.trim() : currentConfig.baseUrl,
-      model: model.trim() || currentConfig.models[0]?.id || ''
+      apiUrl: isLocalProvider ? apiUrl.trim() : currentConfig.baseUrl,
+      model: model.trim(),
+      protocol: isLocalProvider ? protocol : currentConfig.protocol
     }
 
     saveApiConfig(config)
@@ -59,14 +83,13 @@ export default function SettingsPage() {
     setTestResult(null)
 
     try {
-      const config = API_PROVIDERS[provider]
-      const url = (config.allowCustomUrl || isLocalProvider) ? apiUrl : config.baseUrl
+      const testProtocol = isLocalProvider ? protocol : currentConfig.protocol
+      const url = isLocalProvider ? apiUrl : currentConfig.baseUrl
       const testModel = model.trim()
 
-      // 根据不同供应商构建不同的请求
       let response: Response
 
-      if (provider === 'dashscope') {
+      if (testProtocol === 'dashscope') {
         // 通义千问特殊格式
         response = await fetch(url, {
           method: 'POST',
@@ -80,8 +103,8 @@ export default function SettingsPage() {
             parameters: { max_tokens: 10 }
           })
         })
-      } else if (provider === 'claude' || provider === 'local-anthropic') {
-        // Claude/本地Anthropic特殊格式
+      } else if (testProtocol === 'anthropic') {
+        // Claude/Anthropic格式
         response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -96,7 +119,7 @@ export default function SettingsPage() {
           })
         })
       } else {
-        // OpenAI兼容格式 (OpenAI, DeepSeek, 智谱, Moonshot, 本地OpenAI)
+        // OpenAI兼容格式
         response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -140,15 +163,6 @@ export default function SettingsPage() {
     }
   }
 
-  const currentConfig = API_PROVIDERS[provider]
-
-  // 判断是否为本地部署类型
-  const isLocalProvider = provider === 'local-openai' || provider === 'local-anthropic'
-
-  // 判断是否允许自定义URL和模型
-  const canEditUrl = currentConfig.allowCustomUrl || isLocalProvider
-  const canEditModel = currentConfig.allowCustomModel || isLocalProvider
-
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-2xl mx-auto">
@@ -191,49 +205,72 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* API地址 */}
-            {(currentConfig.allowCustomUrl || isLocalProvider) && (
+            {/* 协议类型选择 - 仅本地部署显示 */}
+            {isLocalProvider && (
+              <div>
+                <label className="block text-slate-300 mb-2 text-sm">API协议类型</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(API_PROTOCOLS) as ApiProtocol[]).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setProtocol(key)}
+                      className={`py-2 px-3 rounded-lg text-sm transition-colors ${
+                        protocol === key
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                    >
+                      {API_PROTOCOLS[key].displayName}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-slate-500 text-xs mt-1">
+                  {API_PROTOCOLS[protocol].authHeader} 格式认证
+                </p>
+              </div>
+            )}
+
+            {/* API地址 - 本地部署可编辑 */}
+            {isLocalProvider && (
               <div>
                 <label className="block text-slate-300 mb-2 text-sm">API地址</label>
                 <input
                   type="text"
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder={isLocalProvider ? 'http://localhost:11434/v1/chat/completions' : 'https://api.example.com/v1/chat/completions'}
+                  placeholder={`http://localhost:${API_PROTOCOLS[protocol].defaultPort}${API_PROTOCOLS[protocol].defaultEndpoint}`}
                   className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
-                {isLocalProvider && (
-                  <p className="text-slate-500 text-xs mt-1">
-                    本地部署请填写完整地址，如 http://localhost:11434/v1/chat/completions
-                  </p>
-                )}
+                <p className="text-slate-500 text-xs mt-1">
+                  本地部署请填写完整地址，如 Ollama: http://localhost:11434/v1/chat/completions
+                </p>
               </div>
             )}
 
-            {/* 模型选择 */}
+            {/* 模型名称 - 所有供应商都支持自定义 */}
             <div>
-              <label className="block text-slate-300 mb-2 text-sm">模型</label>
-              {(currentConfig.allowCustomModel || isLocalProvider) ? (
-                <input
-                  type="text"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="请输入模型名称，如 gpt-4o、qwen-max 等"
-                  className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {currentConfig.models.map((m) => (
+              <label className="block text-slate-300 mb-2 text-sm">模型名称</label>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="请输入模型名称"
+                className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              {/* 模型建议 */}
+              {currentConfig.modelSuggestions.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {currentConfig.modelSuggestions.map((suggestion) => (
                     <button
-                      key={m.id}
-                      onClick={() => setModel(m.id)}
-                      className={`py-2 px-3 rounded-lg text-sm transition-colors text-left ${
-                        model === m.id
+                      key={suggestion}
+                      onClick={() => setModel(suggestion)}
+                      className={`px-2 py-1 rounded text-xs transition-colors ${
+                        model === suggestion
                           ? 'bg-primary-600 text-white'
                           : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
                       }`}
                     >
-                      {m.name}
+                      {suggestion}
                     </button>
                   ))}
                 </div>
@@ -263,6 +300,11 @@ export default function SettingsPage() {
                   获取密钥: <a href={currentConfig.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary-400 hover:underline">{currentConfig.docsUrl}</a>
                 </p>
               )}
+              {isLocalProvider && (
+                <p className="text-slate-500 text-xs mt-1">
+                  本地部署通常不需要API密钥，可留空
+                </p>
+              )}
             </div>
 
             {/* 当前配置状态 */}
@@ -271,6 +313,9 @@ export default function SettingsPage() {
                 <p className="text-slate-400">
                   当前配置: <span className="text-green-400">{API_PROVIDERS[apiConfig.apiProvider]?.name || apiConfig.apiProvider}</span>
                   {' '}/ {apiConfig.model || '默认模型'}
+                  {apiConfig.protocol && apiConfig.apiProvider === 'local' && (
+                    <span className="text-slate-500"> ({API_PROTOCOLS[apiConfig.protocol]?.name})</span>
+                  )}
                   {' '}/ {getDisplayApiKey()}
                 </p>
               </div>
