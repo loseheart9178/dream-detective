@@ -90,3 +90,35 @@ export interface AskSuspectResponse {
 
 // 问题直白度 0=危险 1=可疑 2=中性 3=委婉
 export type QuestionDirectness = 0 | 1 | 2 | 3
+
+// ============================================
+// 沉浸式体验相关类型
+// ============================================
+
+// 沉浸感等级
+export type ImmersionLevel = 'basic' | 'standard' | 'immersive'
+
+// 多媒体模型配置模式
+export type MediaModelMode = 'unified' | 'separate'
+
+// 沉浸体验配置
+export interface ImmersionConfig {
+  level: ImmersionLevel
+  modelMode: MediaModelMode
+  unifiedApiKey?: string
+  unifiedModel?: string
+  imageApiKey?: string
+  imageProvider?: 'wanxi' | 'dalle' | 'stability' | 'minimax'
+  speechApiKey?: string
+  speechProvider?: 'aliyun' | 'openai' | 'elevenlabs' | 'minimax'
+  musicVolume: number
+  soundEffectsEnabled: boolean
+}
+
+// 案件多媒体
+export interface CaseMedia {
+  sceneImages: string[]
+  suspectImages: string[]
+  clueImages: string[]
+  backgroundMusic?: string
+}

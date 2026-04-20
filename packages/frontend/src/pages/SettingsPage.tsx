@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApiConfig } from '../hooks/useApiConfig'
-import { API_PROVIDERS, API_PROTOCOLS, type ApiProvider, type ApiConfig, type ApiProtocol } from '../types'
+import { useImmersionConfig } from '../hooks/useImmersionConfig'
+import { API_PROVIDERS, API_PROTOCOLS, ImmersionLevelConfig, type ApiProvider, type ApiConfig, type ApiProtocol, type ImmersionLevel } from '../types'
 
 export default function SettingsPage() {
   const navigate = useNavigate()
   const { apiConfig, saveApiConfig, deleteApiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
+  const { config: immersionConfig, setLevel, setModelMode, setUnifiedApiKey, setMusicVolume, setSoundEffectsEnabled } = useImmersionConfig()
 
   const [provider, setProvider] = useState<ApiProvider>(apiConfig?.apiProvider || 'openai')
   const [apiKey, setApiKey] = useState('')
@@ -15,6 +17,10 @@ export default function SettingsPage() {
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // 沉浸体验配置状态
+  const [unifiedApiKey, setUnifiedApiKeyState] = useState(immersionConfig.unifiedApiKey || '')
+  const [showImmersionKey, setShowImmersionKey] = useState(false)
 
   const isLocalProvider = provider === 'local'
   const currentConfig = API_PROVIDERS[provider]
@@ -358,6 +364,149 @@ export default function SettingsPage() {
                 删除配置
               </button>
             )}
+          </div>
+        </div>
+
+        {/* 沉浸体验配置 */}
+        <div className="bg-slate-800 rounded-lg p-6 mb-4">
+          <h2 className="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">
+            🎨 沉浸体验配置
+          </h2>
+
+          <div className="space-y-4">
+            {/* 沉浸感等级选择 */}
+            <div>
+              <label className="block text-slate-300 mb-2 text-sm">沉浸感等级</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(Object.keys(ImmersionLevelConfig) as ImmersionLevel[]).map((key) => {
+                  const level = ImmersionLevelConfig[key]
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setLevel(key)}
+                      className={`py-3 px-4 rounded-lg text-sm transition-colors text-center ${
+                        immersionConfig.level === key
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                    >
+                      <div className="font-bold">{level.name}</div>
+                      <div className="text-xs opacity-70 mt-1">{level.description}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 多媒体模型配置模式 */}
+            {immersionConfig.level !== 'basic' && (
+              <>
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">多媒体模型配置</label>
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={() => setModelMode('unified')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
+                        immersionConfig.modelMode === 'unified'
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                    >
+                      使用单一全模态模型（如MiniMax）
+                    </button>
+                    <button
+                      onClick={() => setModelMode('separate')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
+                        immersionConfig.modelMode === 'separate'
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                    >
+                      分别配置各服务
+                    </button>
+                  </div>
+                </div>
+
+                {/* 统一模式：全模态模型API Key */}
+                {immersionConfig.modelMode === 'unified' && (
+                  <div>
+                    <label className="block text-slate-300 mb-2 text-sm">全模态模型 API密钥</label>
+                    <div className="relative">
+                      <input
+                        type={showImmersionKey ? 'text' : 'password'}
+                        value={unifiedApiKey}
+                        onChange={(e) => {
+                          setUnifiedApiKeyState(e.target.value)
+                          setUnifiedApiKey(e.target.value)
+                        }}
+                        placeholder="输入MiniMax或其他全模态模型API密钥"
+                        className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <button
+                        onClick={() => setShowImmersionKey(!showImmersionKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                      >
+                        {showImmersionKey ? '🙈' : '👁️'}
+                      </button>
+                    </div>
+                    <p className="text-slate-500 text-xs mt-1">
+                      MiniMax支持文本+图片+语音，一Key多用
+                    </p>
+                  </div>
+                )}
+
+                {/* 分离模式：图片和语音分别配置 */}
+                {immersionConfig.modelMode === 'separate' && (
+                  <div className="space-y-3 bg-slate-700/50 rounded-lg p-4">
+                    <div>
+                      <label className="block text-slate-400 mb-1 text-xs">图片生成</label>
+                      <select className="w-full bg-slate-600 text-slate-300 rounded px-3 py-2 text-sm">
+                        <option value="minimax">MiniMax</option>
+                        <option value="wanxi">通义万相</option>
+                        <option value="dalle">DALL-E 3</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 text-xs">语音合成</label>
+                      <select className="w-full bg-slate-600 text-slate-300 rounded px-3 py-2 text-sm">
+                        <option value="minimax">MiniMax TTS</option>
+                        <option value="aliyun">阿里云TTS</option>
+                        <option value="openai">OpenAI TTS</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* 音量控制 */}
+            <div>
+              <label className="block text-slate-300 mb-2 text-sm">
+                背景音乐音量: {immersionConfig.musicVolume}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={immersionConfig.musicVolume}
+                onChange={(e) => setMusicVolume(Number(e.target.value))}
+                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+              />
+            </div>
+
+            {/* 音效开关 */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="soundEffects"
+                checked={immersionConfig.soundEffectsEnabled}
+                onChange={(e) => setSoundEffectsEnabled(e.target.checked)}
+                className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-primary-500 focus:ring-primary-500"
+              />
+              <label htmlFor="soundEffects" className="text-slate-300 text-sm">
+                启用音效（如：收集线索、询问回答等交互音效）
+              </label>
+            </div>
           </div>
         </div>
 

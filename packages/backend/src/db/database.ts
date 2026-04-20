@@ -52,6 +52,18 @@ db.exec(`
   )
 `)
 
+db.exec(`
+  -- 案件多媒体表
+  CREATE TABLE IF NOT EXISTS case_media (
+    id TEXT PRIMARY KEY,
+    caseId TEXT NOT NULL,
+    type TEXT NOT NULL,
+    url TEXT NOT NULL,
+    createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (caseId) REFERENCES cases(id)
+  )
+`)
+
 // 插入示例数据（如果数据库为空）
 const caseCount = db.prepare('SELECT COUNT(*) as count FROM cases').get() as { count: number }
 if (caseCount.count === 0) {

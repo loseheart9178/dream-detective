@@ -287,3 +287,105 @@ export interface GameState {
   isLoading: boolean
   error: string | null
 }
+
+// ============================================
+// 沉浸式体验相关类型
+// ============================================
+
+// 沉浸感等级
+export type ImmersionLevel = 'basic' | 'standard' | 'immersive'
+
+export const ImmersionLevelConfig: Record<ImmersionLevel, {
+  name: string
+  description: string
+  hasImages: boolean
+  hasAudio: boolean
+  hasMusic: boolean
+}> = {
+  basic: {
+    name: '基础',
+    description: '纯文本案件，无多媒体',
+    hasImages: false,
+    hasAudio: false,
+    hasMusic: false
+  },
+  standard: {
+    name: '标准',
+    description: '案发现场图 + 关键线索图 + 语音回答',
+    hasImages: true,
+    hasAudio: true,
+    hasMusic: false
+  },
+  immersive: {
+    name: '沉浸',
+    description: '全部图片 + 语音 + 背景音乐 + 音效',
+    hasImages: true,
+    hasAudio: true,
+    hasMusic: true
+  }
+}
+
+// 多媒体模型配置模式
+export type MediaModelMode = 'unified' | 'separate'
+
+// 沉浸体验配置
+export interface ImmersionConfig {
+  level: ImmersionLevel
+  modelMode: MediaModelMode
+  // 统一模式（全模态模型，如MiniMax）
+  unifiedApiKey?: string
+  unifiedModel?: string
+  // 分离模式
+  imageApiKey?: string
+  imageProvider?: 'wanxi' | 'dalle' | 'stability' | 'minimax'
+  speechApiKey?: string
+  speechProvider?: 'aliyun' | 'openai' | 'elevenlabs' | 'minimax'
+  // 音量控制
+  musicVolume: number
+  soundEffectsEnabled: boolean
+}
+
+// 案件多媒体媒体
+export interface CaseMedia {
+  sceneImages: string[]   // 案发现场图
+  suspectImages: string[] // 嫌疑人画像
+  clueImages: string[]    // 线索物品图
+  backgroundMusic?: string // 背景音乐URL
+}
+
+// 侦探故事/名言
+export interface DetectiveStory {
+  id: string
+  type: 'quote' | 'case' | 'tip' | 'story'
+  content: string
+  author?: string
+  source?: string
+  tags: string[]
+}
+
+// 内置侦探名言库
+export const DETECTIVE_QUOTES: DetectiveStory[] = [
+  { id: 'q1', type: 'quote', content: '排除所有不可能的因素，剩下的无论多么难以置信，都是真相。', author: '夏洛克·福尔摩斯', source: '《巴斯克维尔的猎犬》', tags: ['推理', '名言'] },
+  { id: 'q2', type: 'quote', content: '游戏已经开始了，或者说，从来就没有结束过。', author: '赫尔克里·波洛', source: '《帷幕》', tags: ['推理', '名言'] },
+  { id: 'q3', type: 'quote', content: '一切犯罪都源于嫉妒与贪婪，而侦探的职责就是找到那把打开真相的钥匙。', author: '明智小五郎', source: '《明智侦探记》', tags: ['推理', '名言'] },
+  { id: 'q4', type: 'quote', content: '真相有时候就像洋葱，剥开一层还有一层，而侦探的工作就是剥到最后。', author: '科伦坡', source: '《科伦坡探案》', tags: ['推理', '名言'] },
+  { id: 'q5', type: 'quote', content: '不要相信你的眼睛，有时候真相藏在最不起眼的细节里。', author: '詹姆斯·莫里亚蒂', source: '《恐怖谷》', tags: ['推理', '名言'] },
+  { id: 'q6', type: 'quote', content: '每个凶手都会留下痕迹，没有完美的犯罪，只有未被发现的线索。', author: '埃勒里·奎因', source: '《希腊棺材之谜》', tags: ['推理', '名言'] },
+  { id: 'q7', type: 'quote', content: '推理不是一蹴而就的，而是一步一步逼近真相的过程。', author: '金田一耕助', source: '《本阵杀人事件》', tags: ['推理', '名言'] },
+  { id: 'q8', type: 'quote', content: '最危险的罪犯往往是那些看起来最不可能犯罪的人。', author: '夏洛克·福尔摩斯', source: '《四签名》', tags: ['推理', '名言'] },
+  { id: 'q9', type: 'quote', content: '当你排除了一切不可能的因素，剩下的无论多么荒诞，那就是真相。', author: '夏洛克·福尔摩斯', source: '《巴斯克维尔的猎犬》', tags: ['推理', '名言'] },
+  { id: 'q10', type: 'quote', content: '世界上没有所谓的偶然，一切巧合背后都有必然的联系。', author: '赫尔克里·波洛', source: '《东方快车谋杀案》', tags: ['推理', '名言'] },
+  { id: 't1', type: 'tip', content: '询问嫌疑人时，不同的问题直白度会得到不同风格的回答。委婉的问题更容易获得真实信息。', tags: ['技巧', '询问'] },
+  { id: 't2', type: 'tip', content: '线索中的"干扰线索"会误导你的推理，注意识别哪些是与案件核心相关的。', tags: ['技巧', '线索'] },
+  { id: 't3', type: 'tip', content: '嫌疑人的"动机"是破案关键，仔细分析每个嫌疑人与死者的关系。', tags: ['技巧', '动机'] },
+  { id: 't4', type: 'tip', content: '嫌疑人的"谎言"往往是破案的突破口，注意他们在回答中的矛盾。', tags: ['技巧', '谎言'] },
+  { id: 't5', type: 'tip', content: '"不在场证明"是真凶最在意的部分，交叉验证多个嫌疑人的时间线。', tags: ['技巧', '时间线'] }
+]
+
+// 默认沉浸配置
+export const DEFAULT_IMMERSION_CONFIG: ImmersionConfig = {
+  level: 'basic',
+  modelMode: 'unified',
+  musicVolume: 50,
+  soundEffectsEnabled: true
+}
