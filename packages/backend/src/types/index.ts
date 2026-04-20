@@ -59,7 +59,7 @@ export interface GenerateCaseRequest {
   protocol?: ApiProtocol
 }
 
-export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local'
+export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local' | 'minimax' | 'custom'
 
 // API协议类型
 export type ApiProtocol = 'openai' | 'anthropic' | 'dashscope'
@@ -85,4 +85,8 @@ export interface AskSuspectRequest {
 export interface AskSuspectResponse {
   answer: string
   isLie?: boolean
+  directness?: number
 }
+
+// 问题直白度 0=危险 1=可疑 2=中性 3=委婉
+export type QuestionDirectness = 0 | 1 | 2 | 3

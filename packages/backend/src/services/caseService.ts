@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider, ApiProtocol } from '../types'
+import { CaseRepository } from '../db/caseRepository.js'
+import { ProgressRepository } from '../db/progressRepository.js'
 
 // 类型定义
 type GeneratedCaseData = Omit<Case, 'id' | 'difficulty' | 'keywords' | 'createdAt'>
@@ -99,6 +101,34 @@ const API_PROVIDERS: Record<ApiProvider, {
   },
   local: {
     baseUrl: 'http://localhost:11434/v1/chat/completions',
+    defaultModel: '',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': key ? `Bearer ${key}` : 'Bearer dummy'
+    }),
+    buildBody: (model, prompt) => ({
+      model: model || 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  },
+  minimax: {
+    baseUrl: 'https://api.minimax.chat/v1/text/chatcompletion_v2',
+    defaultModel: 'MiniMax-Text-01',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    }),
+    buildBody: (model, prompt) => ({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || ''
+  },
+  custom: {
+    baseUrl: '',
     defaultModel: '',
     headers: (key) => ({
       'Content-Type': 'application/json',
@@ -288,26 +318,38 @@ export async function generateCase(params: {
     createdAt: new Date().toISOString()
   }
 
+  // 保存到数据库
+  CaseRepository.create(newCase)
+  // 同时保留在内存中用于快速访问
   cases.set(caseId, newCase)
   return { caseId }
 }
 
 export async function getCase(id: string): Promise<Case | null> {
-  return cases.get(id) || null
+  // 先从内存获取
+  const cached = cases.get(id)
+  if (cached) return cached
+  // 从数据库获取
+  const dbCase = CaseRepository.findById(id)
+  if (dbCase) {
+    cases.set(id, dbCase)
+    return dbCase
+  }
+  return null
 }
 
 export async function submitAnswer(
-  caseId: string, 
-  killerId: string, 
+  caseId: string,
+  killerId: string,
   explanation: string
 ): Promise<{ correct: boolean; score: number; feedback: string; solution?: Solution }> {
-  const caseData = cases.get(caseId)
+  const caseData = await getCase(caseId)
   if (!caseData) {
     throw new Error('案件不存在')
   }
 
   const isCorrect = killerId === caseData.solution.killerId
-  
+
   let score = 0
   let feedback = ''
 
@@ -320,7 +362,7 @@ export async function submitAnswer(
     // 提到关键线索加分
     if (explanation.includes('线索') || explanation.includes('证据')) score += 10
     if (explanation.includes('时间') || explanation.includes('不在场证明')) score += 10
-    
+
     feedback = '推理正确！你已经成功找到了真凶。'
   } else {
     feedback = '推理有误。请重新审视线索，找出真正的凶手。'
@@ -335,7 +377,43 @@ export async function submitAnswer(
 }
 
 export async function getSolution(caseId: string): Promise<Case | null> {
-  return cases.get(caseId) || null
+  return await getCase(caseId)
+}
+
+// 问题直白度分类
+function classifyQuestionDirectness(question: string): number {
+  const q = question.toLowerCase()
+
+  // 危险模式 (0) - 直接指控
+  const dodgyPatterns = [
+    /(?:你是|是不是|是不是说).*凶手/,
+    /你.*杀.*(?:他|她|死者)/,
+    /(?:承认|坦白).*(?:犯罪|杀人)/,
+    /你有.*嫌疑/,
+    /(?:别|不要).*说谎|你在.*说谎/
+  ]
+
+  // 可疑模式 (1) - 假设有罪质问
+  const suspiciousPatterns = [
+    /为什么.*(?:杀|害|攻击)/,
+    /(?:难道|是不是).*你/,
+    /有.*什么.*动机/,
+    /(?:不太|有点).*可疑|我.*怀疑/
+  ]
+
+  // 委婉模式 (3) - 间接试探
+  const subtlePatterns = [
+    /那天.*晚.*一个人/,
+    /最后.*见到.*时候/,
+    /有.*什么.*看法/,
+    /可以.*说.*一下/,
+    /那天.*有.*人.*一起/
+  ]
+
+  if (dodgyPatterns.some(p => p.test(q))) return 0
+  if (suspiciousPatterns.some(p => p.test(q))) return 1
+  if (subtlePatterns.some(p => p.test(q))) return 3
+  return 2 // 默认中性
 }
 
 // 询问嫌疑人
@@ -344,7 +422,7 @@ export async function askSuspect(
   suspectId: string,
   question: string
 ): Promise<AskSuspectResponse> {
-  const caseData = cases.get(caseId)
+  const caseData = await getCase(caseId)
   if (!caseData) {
     throw new Error('案件不存在')
   }
@@ -355,69 +433,74 @@ export async function askSuspect(
   }
 
   const isKiller = suspectId === caseData.solution.killerId
+  const directness = classifyQuestionDirectness(question)
 
   // 检查是否配置了API
   const apiKey = process.env.OPENAI_API_KEY || process.env.DASHSCOPE_API_KEY
 
   if (!apiKey || apiKey === 'your_openai_api_key_here' || apiKey === 'your_dashscope_api_key_here') {
     // 返回示例回答
-    return generateSampleAnswer(suspect, question, isKiller)
+    return generateSampleAnswer(suspect, question, isKiller, directness)
   }
 
   // 调用AI生成回答
-  return generateAnswerWithAI(suspect, question, isKiller, caseData)
+  return generateAnswerWithAI(suspect, question, isKiller, caseData, directness)
 }
 
 // 示例回答 (无API时使用)
-function generateSampleAnswer(suspect: Suspect, question: string, isKiller: boolean): AskSuspectResponse {
-  const answers: Record<string, Record<string, string>> = {
-    s1: {
-      '你当时在哪里?': '案发时我在公司开会，有十几个员工可以作证。会议从晚上7点一直开到9点半。',
-      '你和死者关系如何?': '我们关系很好，是多年的生意伙伴。虽然有过一些商业上的分歧，但都是为了公司好。',
-      '你有什么要说的吗?': '我对刘总的离世感到非常悲痛。他是一个优秀的合作伙伴，我会想念他的。'
-    },
-    s2: {
-      '你当时在哪里?': '案发时我在餐厅吃晚餐，有服务员和监控可以证明。我大约8点到9点都在那里。',
-      '你和死者关系如何?': '刘总对我很好，他是个正直的人。我为他工作了三年，一直很愉快。',
-      '你有什么要说的吗?': '我不知道发生了什么，希望警方能尽快找到凶手。'
-    },
-    s3: {
-      '你当时在哪里?': '案发时我在值班室看监控，整晚都在岗。没有看到任何人进出大楼。',
-      '你和死者关系如何?': '刘总...他对我不太满意，之前因为一些小事批评过我。但我不想报复他。',
-      '你有什么要说的吗?': '那天晚上真的没有异常情况，一切都很正常。'
-    },
-    s4: {
-      '你当时在哪里?': '案发时我在医院值班，有同事和病人可以证明。我整晚都在急诊室。',
-      '你和死者关系如何?': '我们已经离婚三年了，虽然有过争执，但那都是过去的事了。我已经放下了。',
-      '你有什么要说的吗?': '我对他的死感到遗憾，但我们已经没有关系了。'
-    },
-    s5: {
-      '你当时在哪里?': '案发时我在事务所处理文件，有同事可以证明。我那天加班到很晚。',
-      '你和死者关系如何?': '刘总是我的客户，我们合作多年。他是一个守法的好公民，我很尊重他。',
-      '你有什么要说的吗?': '作为他的律师，我对他的离世深感遗憾。希望警方能尽快破案。'
+function generateSampleAnswer(suspect: Suspect, question: string, isKiller: boolean, directness: number): AskSuspectResponse {
+  const q = question.toLowerCase()
+  let answer: string
+
+  // 根据直白度调整回答策略
+  if (isKiller) {
+    if (directness === 0) {
+      // 危险问题 - 强烈否认
+      answer = '你疯了吗？！我怎么会杀他！我们关系那么好，你这是在诬陷我！'
+    } else if (directness === 1) {
+      // 可疑问题 - 冷静否认+轻度误导
+      const others = ['我觉得可能是...', '那晚我确实看到了', '你不应该只盯着我']
+      answer = others[Math.floor(Math.random() * others.length)] + '，也许该查查别人。'
+    } else if (directness === 2) {
+      // 中性问题 - 半真半假
+      if (q.includes('哪里') || q.includes('时间') || q.includes('地点')) {
+        answer = suspect.alibi.split('。')[0] + '。'
+      } else if (q.includes('关系')) {
+        answer = suspect.lies
+      } else {
+        answer = '我不太想多说，希望你能理解。'
+      }
+    } else {
+      // 委婉问题 - 基本真话但点到为止
+      answer = '那晚我确实一个人在家，但我真的不知道发生了什么...'
+    }
+  } else {
+    if (directness === 0) {
+      // 非凶手对危险问题 - 困惑委屈
+      answer = '你为什么这么问我？我真的不知道发生了什么，我会配合调查的。'
+    } else if (directness === 1) {
+      // 可疑问题 - 轻度不满但配合
+      answer = '我没有理由杀他。我们确实有过矛盾，但那都是工作上的正常分歧。'
+    } else if (directness === 2) {
+      // 中性问题 - 如实回答
+      if (q.includes('哪里') || q.includes('时间') || q.includes('地点')) {
+        answer = suspect.alibi
+      } else if (q.includes('关系')) {
+        answer = `我们是${suspect.relationToVictim}，关系应该说是正常的。`
+      } else {
+        answer = '如果有任何线索能帮到警方，我愿意配合。'
+      }
+    } else {
+      // 委婉问题 - 完全放松
+      answer = '那晚我在家看电视，很早就睡了。我对刘总没有任何恶意，真的很震惊听到这个消息。'
     }
   }
 
-  const suspectAnswers = answers[suspect.id] || {}
-  const answer = suspectAnswers[question] || generateDefaultAnswer(suspect, question, isKiller)
-
   return {
     answer,
-    isLie: isKiller && question.includes('关系')
+    isLie: isKiller && directness < 2,
+    directness
   }
-}
-
-function generateDefaultAnswer(suspect: Suspect, question: string, isKiller: boolean): string {
-  if (question.includes('哪里') || question.includes('时间')) {
-    return suspect.alibi
-  }
-  if (question.includes('关系')) {
-    return `我和${suspect.relationToVictim}的关系，应该说是正常的。`
-  }
-  if (question.includes('动机') || question.includes('为什么')) {
-    return `我没有任何理由伤害他。`
-  }
-  return `关于这个问题，我只能说我不太清楚。`
 }
 
 // AI生成回答
@@ -425,9 +508,11 @@ async function generateAnswerWithAI(
   suspect: Suspect,
   question: string,
   isKiller: boolean,
-  caseData: Case
+  caseData: Case,
+  directness: number
 ): Promise<AskSuspectResponse> {
-  const prompt = buildAskPrompt(suspect, question, isKiller, caseData)
+  const prompt = buildAskPrompt(suspect, question, isKiller, caseData, directness)
+  const temperature = isKiller && directness <= 1 ? 0.3 : 0.7
 
   // 尝试OpenAI
   if (process.env.OPENAI_API_KEY) {
@@ -440,14 +525,14 @@ async function generateAnswerWithAI(
       body: JSON.stringify({
         model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
+        temperature,
         max_tokens: 200
       })
     })
 
     const data = await response.json()
     const answer = data.choices[0].message.content.trim()
-    return { answer, isLie: isKiller }
+    return { answer, isLie: isKiller, directness }
   }
 
   // 尝试通义千问
@@ -461,37 +546,129 @@ async function generateAnswerWithAI(
       body: JSON.stringify({
         model: 'qwen-turbo',
         input: { prompt },
-        parameters: { temperature: 0.7, max_tokens: 200 }
+        parameters: { temperature, max_tokens: 200 }
       })
     })
 
     const data = await response.json()
     const answer = data.output.text.trim()
-    return { answer, isLie: isKiller }
+    return { answer, isLie: isKiller, directness }
   }
 
   throw new Error('未配置AI API密钥')
 }
 
-function buildAskPrompt(suspect: Suspect, question: string, isKiller: boolean, caseData: Case): string {
+function buildAskPrompt(suspect: Suspect, question: string, isKiller: boolean, caseData: Case, directness: number): string {
   const victimName = caseData.victim.name
-  const killerInfo = isKiller
-    ? `重要：你是真正的凶手！你的动机是：${suspect.motive}。你必须撒谎掩盖真相，但不要过于明显。当你被问到与死者关系时，要说：${suspect.lies}。你的不在场证明是假的：${suspect.alibi}。`
-    : `你不是凶手。你的动机是：${suspect.motive}，但你没有杀人。你的不在场证明是真的：${suspect.alibi}。你有一个秘密：${suspect.secret}，如果被问到相关话题，你会试图转移话题。`
+
+  // 根据直白度和身份构建行为指令
+  let behavior: string
+  let responseLength: string
+  let emotionalTone: string
+
+  if (isKiller) {
+    switch (directness) {
+      case 0: // 危险
+        behavior = `【关键】这是危险级别的问题！对方几乎在直接指控你！你必须：
+        1. 强烈否认："什么？！你在说什么！我不是凶手！"
+        2. 表现出愤怒或受伤："你怎么能这样问我？"
+        3. 反过来质问对方或提及他人的嫌疑
+        4. 绝对不能承认，哪怕暗示也不行`
+        responseLength = '短促有力，1-2句话，带有情绪'
+        emotionalTone = '愤怒/受伤/防御'
+        break
+      case 1: // 可疑
+        behavior = `【重要】对方在怀疑你。这类问题预设了你可能有罪。
+        1. 冷静否认，但可以有一点点防卫姿态
+        2. 给出表面合理的解释
+        3. 适当转移话题到其他人身上
+        4. 不要太激动，否则反而显得心虚`
+        responseLength = '中等长度，2-3句话'
+        emotionalTone = '冷静但略显不悦'
+        break
+      case 2: // 中性
+        behavior = `这是正常的询问。你可以：
+        1. 如实回答背景信息（这些都是真的）
+        2. 但关键点（动机、不在场证明）要半真半假
+        3. 适当加入一些看似合理的细节来增加可信度
+        4. 如果被追问敏感点，可以略微转移`
+        responseLength = '中等长度，2-3句话'
+        emotionalTone = '平静/配合'
+        break
+      default: // 3 委婉
+        behavior = `这个问题很委婉，没有明显针对你。你可能会放松警惕。
+        但记住：你仍然要隐瞒你是凶手的事实！
+        1. 基本如实回答（因为问题本身不威胁你）
+        2. 但如果有漏洞可能被对方捕捉到
+        3. 不要主动说太多，点到为止`
+        responseLength = '简短，1-2句话'
+        emotionalTone = '放松/自然'
+        break
+    }
+  } else {
+    // 非凶手
+    switch (directness) {
+      case 0: // 危险
+        behavior = `【困惑】这个问题太突然了，让我觉得被冒犯。
+        1. 表示困惑："你为什么这么问？"
+        2. 否认但可能显得委屈
+        3. 不应该反问或指责，保持被动防御`
+        responseLength = '短促，1-2句话'
+        emotionalTone = '困惑/委屈/震惊'
+        break
+      case 1: // 可疑
+        behavior = `对方在怀疑我，这让我不太舒服。
+        1. 否认但可能略带不满
+        2. 解释清楚自己的清白
+        3. 如果问到你的secret，会紧张但尽力回避`
+        responseLength = '中等长度，2-3句话'
+        emotionalTone = '略显不满/紧张'
+        break
+      case 2: // 中性
+        behavior = `正常的问题，我可以配合回答。
+        1. 如实回答（你的alibi是真的）
+        2. 如果被问到secret，会有点回避但不至于说谎
+        3. 可能无意中透露一些对真凶不利的信息`
+        responseLength = '中等长度，2-3句话'
+        emotionalTone = '自然/配合'
+        break
+      default: // 3 委婉
+        behavior = `这个问题很轻松，没有压力。
+        1. 完全放松，如实回答
+        2. 可能会主动多说一些
+        3. 如果知道对真凶不利的信息，可能无意中说出来`
+        responseLength = '可能会稍长，2-4句话'
+        emotionalTone = '放松/健谈'
+        break
+    }
+  }
+
+  const directnessLabel = ['危险', '可疑', '中性', '委婉'][directness]
 
   return `你是一个谋杀案中的嫌疑人，请以第一人称回答问题。
 
+【基本信息】
 姓名：${suspect.name}
 年龄：${suspect.age}岁
 职业：${suspect.occupation}
 与死者关系：${suspect.relationToVictim}
 死者姓名：${victimName}
 
-${killerInfo}
+【角色设定】
+${isKiller
+    ? `重要：你是真正的凶手！你的动机是：${suspect.motive}。你的不在场证明是假的：${suspect.alibi}。你说过的话：${suspect.lies}。`
+    : `你不是凶手。你的动机是：${suspect.motive}，但你没有杀人。你的不在场证明是真的：${suspect.alibi}。你有一个秘密：${suspect.secret}，如果被直接问到会试图回避。`
+}
 
-玩家问题：${question}
+【当前问题类型】${directnessLabel}
 
-请以自然、口语化的方式回答，保持角色设定。回答要简短（1-3句话），不要主动透露过多信息。如果问题涉及你的谎言或秘密，要自然地回避或撒谎。`
+【回答要求】
+${behavior}
+
+回答长度：${responseLength}
+情绪基调：${emotionalTone}
+
+请用自然、口语化的方式回答。不要写出任何角色指示或括号说明。`
 }
 
 // AI生成案件

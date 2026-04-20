@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import type { Case, Clue, Suspect, AskSuspectResponse, QuestionAnswer } from '../types'
+import type { Case, Clue, Suspect, AskSuspectResponse, QuestionAnswer, QuestionDirectness } from '../types'
 import { useGameProgress } from '../hooks/useGameProgress'
+import QuestionInput from '../components/QuestionInput'
 
 type TabType = 'scene' | 'clues' | 'suspects' | 'submit'
 
@@ -124,7 +125,7 @@ export default function GamePage() {
     }
   }
 
-  const handleAskQuestion = async (suspectId: string, question: string) => {
+  const handleAskQuestion = async (suspectId: string, question: string, directness: number) => {
     // 检查是否已经问过这个问题
     const existingQuestions = askedQuestions[suspectId] || []
     if (existingQuestions.some(qa => qa.question === question)) {
@@ -134,7 +135,7 @@ export default function GamePage() {
     // 添加加载状态
     setAskedQuestions(prev => ({
       ...prev,
-      [suspectId]: [...(prev[suspectId] || []), { question, answer: '', isLoading: true }]
+      [suspectId]: [...(prev[suspectId] || []), { question, answer: '', isLoading: true, directness: directness as QuestionDirectness }]
     }))
 
     setAskingQuestion(true)
@@ -408,25 +409,13 @@ export default function GamePage() {
                   <p><strong>动机:</strong> {selectedSuspect.motive}</p>
                   <p><strong>不在场证明:</strong> {selectedSuspect.alibi}</p>
                 </div>
-                <div className="mt-4 space-y-2">
-                  <p className="text-slate-400 text-sm">询问问题:</p>
-                  {['你当时在哪里?', '你和死者关系如何?', '你有什么要说的吗?'].map((q) => {
-                    const isAsked = askedQuestions[selectedSuspect.id]?.some(qa => qa.question === q)
-                    return (
-                      <button
-                        key={q}
-                        onClick={() => !isAsked && !askingQuestion && handleAskQuestion(selectedSuspect.id, q)}
-                        disabled={isAsked || askingQuestion}
-                        className={`block w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                          isAsked
-                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                            : 'bg-slate-600 hover:bg-slate-500 text-slate-300'
-                        }`}
-                      >
-                        {isAsked ? '✓ ' : ''}{q}
-                      </button>
-                    )
-                  })}
+                {/* 新的问题组件 */}
+                <div className="mt-4">
+                  <p className="text-slate-400 text-sm mb-2">询问问题:</p>
+                  <QuestionInput
+                    disabled={askingQuestion}
+                    onAskQuestion={(q, d) => handleAskQuestion(selectedSuspect.id, q, d)}
+                  />
                 </div>
                 {askedQuestions[selectedSuspect.id]?.length > 0 && (
                   <div className="mt-4 space-y-3">

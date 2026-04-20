@@ -54,6 +54,7 @@ export interface QuestionAnswer {
   question: string
   answer: string
   isLoading?: boolean
+  directness?: QuestionDirectness
 }
 
 export interface UserProgress {
@@ -81,7 +82,7 @@ export interface GenerateCaseRequest {
 }
 
 // API供应商类型
-export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local'
+export type ApiProvider = 'openai' | 'dashscope' | 'deepseek' | 'claude' | 'zhipu' | 'moonshot' | 'local' | 'minimax' | 'custom'
 
 // API协议类型
 export type ApiProtocol = 'openai' | 'anthropic' | 'dashscope'
@@ -214,6 +215,28 @@ export const API_PROVIDERS: Record<ApiProvider, {
     allowCustomUrl: true,
     protocol: 'openai',
     modelSuggestions: ['llama3.1', 'qwen2.5', 'deepseek-r1', 'mistral']
+  },
+  minimax: {
+    name: 'MiniMax',
+    displayName: 'MiniMax (海螺AI)',
+    baseUrl: 'https://api.minimax.chat/v1/text/chatcompletion_v2',
+    defaultModel: 'MiniMax-Text-01',
+    keyPlaceholder: '请输入MiniMax API Key',
+    docsUrl: 'https://www.minimaxi.com/document/GuYaoWenTang/perplexity/api',
+    allowCustomUrl: false,
+    protocol: 'openai',
+    modelSuggestions: ['MiniMax-Text-01']
+  },
+  custom: {
+    name: '自定义',
+    displayName: '自定义供应商',
+    baseUrl: '',
+    defaultModel: '',
+    keyPlaceholder: '请输入API地址',
+    docsUrl: '',
+    allowCustomUrl: true,
+    protocol: 'openai',
+    modelSuggestions: []
   }
 }
 
@@ -237,6 +260,24 @@ export interface AskSuspectRequest {
 export interface AskSuspectResponse {
   answer: string
   isLie?: boolean
+  directness?: number
+}
+
+// 问题直白度 0=危险 1=可疑 2=中性 3=委婉
+export type QuestionDirectness = 0 | 1 | 2 | 3
+
+export const QuestionDirectnessLabels: Record<QuestionDirectness, string> = {
+  0: '危险',
+  1: '可疑',
+  2: '中性',
+  3: '委婉'
+}
+
+export const QuestionDirectnessColors: Record<QuestionDirectness, string> = {
+  0: 'bg-red-600',
+  1: 'bg-yellow-600',
+  2: 'bg-slate-600',
+  3: 'bg-green-600'
 }
 
 // 游戏状态类型
