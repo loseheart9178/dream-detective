@@ -52,6 +52,7 @@ export interface GenerateCaseRequest {
   keywords: string
   difficulty: number
   numSuspects: number
+  immersionLevel?: ImmersionLevel
   apiKey?: string
   apiProvider?: ApiProvider
   apiUrl?: string

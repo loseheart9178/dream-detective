@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider, ApiProtocol } from '../types'
+import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider, ApiProtocol, ImmersionLevel } from '../types'
 import { CaseRepository } from '../db/caseRepository.js'
 import { ProgressRepository } from '../db/progressRepository.js'
 
@@ -298,13 +298,14 @@ export async function generateCase(params: {
   keywords: string
   difficulty: number
   numSuspects: number
+  immersionLevel?: ImmersionLevel
   apiKey?: string
   apiProvider?: ApiProvider
   apiUrl?: string
   model?: string
   protocol?: ApiProtocol
 }): Promise<{ caseId: string }> {
-  const { keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model, protocol } = params
+  const { keywords, difficulty, numSuspects, immersionLevel = 'basic', apiKey, apiProvider, apiUrl, model, protocol } = params
 
   // 调用AI服务生成案件
   const caseData = await generateCaseWithAI(keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model, protocol)
@@ -317,6 +318,9 @@ export async function generateCase(params: {
     keywords,
     createdAt: new Date().toISOString()
   }
+
+  // TODO: 根据 immersionLevel 生成多媒体（图片、语音等）
+  // 目前沉浸级别配置已接收，但多媒体生成功能待实现
 
   // 保存到数据库
   CaseRepository.create(newCase)

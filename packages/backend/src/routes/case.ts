@@ -6,11 +6,12 @@ const router = Router()
 // 生成案件
 router.post('/generate', async (req, res) => {
   try {
-    const { keywords, difficulty, numSuspects, apiKey, apiProvider, apiUrl, model, protocol } = req.body
+    const { keywords, difficulty, numSuspects, immersionLevel, apiKey, apiProvider, apiUrl, model, protocol } = req.body
     const result = await generateCase({
       keywords,
       difficulty,
       numSuspects,
+      immersionLevel,
       apiKey,
       apiProvider,
       apiUrl,

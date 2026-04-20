@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import type { GenerateCaseRequest, Case } from '../types'
+import type { GenerateCaseRequest, Case, ImmersionLevel } from '../types'
+import { ImmersionLevelConfig } from '../types'
 import { useGameProgress } from '../hooks/useGameProgress'
 import { useApiConfig } from '../hooks/useApiConfig'
+import { useImmersionConfig } from '../hooks/useImmersionConfig'
 
 // 预设关键词标签
 const PRESET_KEYWORDS = [
@@ -18,9 +20,11 @@ export default function CreateCasePage() {
   const navigate = useNavigate()
   const { saveCaseData } = useGameProgress()
   const { apiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
+  const { config: immersionConfig } = useImmersionConfig()
   const [keywords, setKeywords] = useState('')
   const [difficulty, setDifficulty] = useState(2)
   const [numSuspects, setNumSuspects] = useState(4)
+  const [immersionLevel, setImmersionLevel] = useState<ImmersionLevel>(immersionConfig.level)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [generatingStage, setGeneratingStage] = useState('')
@@ -50,6 +54,7 @@ export default function CreateCasePage() {
         keywords: keywords.trim(),
         difficulty,
         numSuspects,
+        immersionLevel,
         apiKey: apiConfig?.apiKey,
         apiProvider: apiConfig?.apiProvider,
         apiUrl: apiConfig?.apiUrl,
@@ -94,7 +99,7 @@ export default function CreateCasePage() {
       setIsGenerating(false)
       setGeneratingStage('')
     }
-  }, [keywords, difficulty, numSuspects, apiConfig, saveCaseData, navigate])
+  }, [keywords, difficulty, numSuspects, immersionLevel, apiConfig, saveCaseData, navigate])
 
   // 点击预设标签
   const handlePresetClick = (value: string) => {
@@ -207,6 +212,36 @@ export default function CreateCasePage() {
               onChange={(e) => setNumSuspects(Number(e.target.value))}
               className="w-full"
             />
+          </div>
+
+          {/* 沉浸级别选择 */}
+          <div>
+            <label className="block text-slate-300 mb-2">沉浸体验级别</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(Object.keys(ImmersionLevelConfig) as ImmersionLevel[]).map((key) => {
+                const level = ImmersionLevelConfig[key]
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setImmersionLevel(key)}
+                    disabled={isGenerating}
+                    className={`py-3 px-4 rounded-lg text-sm transition-colors text-center ${
+                      immersionLevel === key
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                    }`}
+                  >
+                    <div className="font-bold">{level.name}</div>
+                    <div className="text-xs opacity-70 mt-1">{level.description}</div>
+                  </button>
+                )
+              })}
+            </div>
+            {immersionLevel !== 'basic' && !immersionConfig.unifiedApiKey && (
+              <p className="text-amber-400 text-xs mt-2">
+                提示：沉浸模式需要在设置中配置多媒体API密钥，否则将自动降级为基础模式
+              </p>
+            )}
           </div>
 
           {/* 关键词输入 */}
