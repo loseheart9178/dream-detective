@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { generateCase, getCase, submitAnswer, getSolution, askSuspect } from '../services/caseService.js'
+import { generateCase, getCase, submitAnswer, getSolution, askSuspect, getCaseMedia, synthesizeTTS } from '../services/caseService.js'
 
 const router = Router()
 
@@ -89,6 +89,39 @@ router.post('/:id/ask', async (req, res) => {
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : '询问失败'
+    })
+  }
+})
+
+// 获取案件多媒体
+router.get('/:id/media', async (req, res) => {
+  try {
+    const media = await getCaseMedia(req.params.id)
+    res.json({ success: true, data: media })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '获取多媒体失败'
+    })
+  }
+})
+
+// 生成TTS语音
+router.post('/:id/tts', async (req, res) => {
+  try {
+    const { text, immersionLevel } = req.body
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供要转换的文本'
+      })
+    }
+    const result = await synthesizeTTS(text, immersionLevel || 'basic')
+    res.json({ success: true, data: result })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'TTS生成失败'
     })
   }
 })

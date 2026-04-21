@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { ImmersionConfig, ImmersionLevel } from '../types'
 import { DEFAULT_IMMERSION_CONFIG } from '../types'
 
@@ -23,45 +23,65 @@ export function useImmersionConfig() {
   }, [])
 
   // 保存配置到localStorage
-  const saveConfig = (newConfig: ImmersionConfig) => {
+  const saveConfig = useCallback((newConfig: ImmersionConfig) => {
     setConfig(newConfig)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig))
-  }
+  }, [])
 
   // 更新沉浸等级
-  const setLevel = (level: ImmersionLevel) => {
+  const setLevel = useCallback((level: ImmersionLevel) => {
     saveConfig({ ...config, level })
-  }
+  }, [config, saveConfig])
 
   // 更新模型模式
-  const setModelMode = (mode: 'unified' | 'separate') => {
+  const setModelMode = useCallback((mode: 'unified' | 'separate') => {
     saveConfig({ ...config, modelMode: mode })
-  }
+  }, [config, saveConfig])
 
   // 更新统一API Key
-  const setUnifiedApiKey = (key: string) => {
+  const setUnifiedApiKey = useCallback((key: string) => {
     saveConfig({ ...config, unifiedApiKey: key })
-  }
+  }, [config, saveConfig])
 
   // 更新统一模型
-  const setUnifiedModel = (model: string) => {
+  const setUnifiedModel = useCallback((model: string) => {
     saveConfig({ ...config, unifiedModel: model })
-  }
+  }, [config, saveConfig])
+
+  // 更新图片 API Key
+  const setImageApiKey = useCallback((key: string) => {
+    saveConfig({ ...config, imageApiKey: key })
+  }, [config, saveConfig])
+
+  // 更新图片提供商
+  const setImageProvider = useCallback((provider: 'wanxi' | 'dalle' | 'stability' | 'minimax') => {
+    saveConfig({ ...config, imageProvider: provider })
+  }, [config, saveConfig])
+
+  // 更新语音 API Key
+  const setSpeechApiKey = useCallback((key: string) => {
+    saveConfig({ ...config, speechApiKey: key })
+  }, [config, saveConfig])
+
+  // 更新语音提供商
+  const setSpeechProvider = useCallback((provider: 'aliyun' | 'openai' | 'elevenlabs' | 'minimax') => {
+    saveConfig({ ...config, speechProvider: provider })
+  }, [config, saveConfig])
 
   // 更新音量
-  const setMusicVolume = (volume: number) => {
+  const setMusicVolume = useCallback((volume: number) => {
     saveConfig({ ...config, musicVolume: volume })
-  }
+  }, [config, saveConfig])
 
   // 更新音效开关
-  const setSoundEffectsEnabled = (enabled: boolean) => {
+  const setSoundEffectsEnabled = useCallback((enabled: boolean) => {
     saveConfig({ ...config, soundEffectsEnabled: enabled })
-  }
+  }, [config, saveConfig])
 
   // 重置配置
-  const resetConfig = () => {
+  const resetConfig = useCallback(() => {
     saveConfig(DEFAULT_IMMERSION_CONFIG)
-  }
+  }, [saveConfig])
 
   return {
     config,
@@ -71,6 +91,10 @@ export function useImmersionConfig() {
     setModelMode,
     setUnifiedApiKey,
     setUnifiedModel,
+    setImageApiKey,
+    setImageProvider,
+    setSpeechApiKey,
+    setSpeechProvider,
     setMusicVolume,
     setSoundEffectsEnabled,
     resetConfig

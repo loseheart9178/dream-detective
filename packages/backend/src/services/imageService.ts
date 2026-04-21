@@ -3,10 +3,10 @@ import { ImmersionConfig } from '../types/index.js'
 // 图片生成API配置
 const IMAGE_PROVIDERS = {
   minimax: {
-    baseUrl: 'https://api.minimax.io/v1',
+    baseUrl: 'https://api.minimax.chat/v1',
     model: 'image-01',
-    generate: async (apiKey: string, prompt: string, size: string = '1:1') => {
-      const response = await fetch('https://api.minimax.io/v1/image_generation', {
+    generate: async (apiKey: string, prompt: string, size: string = '16:9') => {
+      const response = await fetch('https://api.minimax.chat/v1/image_generation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -21,12 +21,13 @@ const IMAGE_PROVIDERS = {
       })
 
       if (!response.ok) {
-        throw new Error(`MiniMax image API error: ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(`MiniMax image API error: ${response.status} - ${errorData.base_resp?.status_msg || errorData.error?.message || 'Unknown error'}`)
       }
 
       const data = await response.json()
-      // MiniMax返回base64或url
-      return data.images?.[0]?.base64 || data.images?.[0]?.url || null
+      // MiniMax返回image_urls数组
+      return data.data?.image_urls?.[0] || null
     }
   },
   wanxi: {
@@ -100,7 +101,7 @@ export async function generateSceneImage(
 
   try {
     const imageUrl = await generateImageWithProvider(prompt, config, 'scene')
-    return { success: true, imageUrl }
+    return { success: true, imageUrl: imageUrl || undefined }
   } catch (error: any) {
     console.error('Scene image generation failed:', error.message)
     return createFallbackResult(error.message)
@@ -116,7 +117,7 @@ export async function generateSuspectPortrait(
 
   try {
     const imageUrl = await generateImageWithProvider(prompt, config, 'suspect')
-    return { success: true, imageUrl }
+    return { success: true, imageUrl: imageUrl || undefined }
   } catch (error: any) {
     console.error('Suspect portrait generation failed:', error.message)
     return createFallbackResult(error.message)
@@ -133,7 +134,7 @@ export async function generateClueImage(
 
   try {
     const imageUrl = await generateImageWithProvider(prompt, config, 'clue')
-    return { success: true, imageUrl }
+    return { success: true, imageUrl: imageUrl || undefined }
   } catch (error: any) {
     console.error('Clue image generation failed:', error.message)
     return createFallbackResult(error.message)

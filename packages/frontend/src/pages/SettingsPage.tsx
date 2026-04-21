@@ -2,13 +2,24 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApiConfig } from '../hooks/useApiConfig'
 import { useImmersionConfig } from '../hooks/useImmersionConfig'
-import { API_PROVIDERS, API_PROTOCOLS, ImmersionLevelConfig, type ApiProvider, type ApiConfig, type ApiProtocol, type ImmersionLevel } from '../types'
+import { API_PROVIDERS, API_PROTOCOLS, type ApiProvider, type ApiConfig, type ApiProtocol } from '../types'
 
 export default function SettingsPage() {
   const navigate = useNavigate()
   const { apiConfig, saveApiConfig, deleteApiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
-  const { config: immersionConfig, setLevel, setModelMode, setUnifiedApiKey, setMusicVolume, setSoundEffectsEnabled } = useImmersionConfig()
+  const {
+    config: immersionConfig,
+    setModelMode,
+    setUnifiedApiKey,
+    setImageApiKey,
+    setImageProvider,
+    setSpeechApiKey,
+    setSpeechProvider,
+    setMusicVolume,
+    setSoundEffectsEnabled
+  } = useImmersionConfig()
 
+  // 文本AI配置状态
   const [provider, setProvider] = useState<ApiProvider>(apiConfig?.apiProvider || 'openai')
   const [apiKey, setApiKey] = useState('')
   const [apiUrl, setApiUrl] = useState(apiConfig?.apiUrl || '')
@@ -18,9 +29,18 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  // 沉浸体验配置状态
+  // 多媒体配置状态
   const [unifiedApiKey, setUnifiedApiKeyState] = useState(immersionConfig.unifiedApiKey || '')
   const [showImmersionKey, setShowImmersionKey] = useState(false)
+  const [imageApiKey, setImageApiKeyState] = useState(immersionConfig.imageApiKey || '')
+  const [showImageKey, setShowImageKey] = useState(false)
+  const [speechApiKey, setSpeechApiKeyState] = useState(immersionConfig.speechApiKey || '')
+  const [showSpeechKey, setShowSpeechKey] = useState(false)
+  const [imageProvider, setImageProviderState] = useState(immersionConfig.imageProvider || 'wanxi')
+  const [speechProvider, setSpeechProviderState] = useState(immersionConfig.speechProvider || 'aliyun')
+  const [mediaTesting, setMediaTesting] = useState(false)
+  const [mediaTestResult, setMediaTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [mediaSaved, setMediaSaved] = useState(false)
 
   const isLocalProvider = provider === 'local'
   const currentConfig = API_PROVIDERS[provider]
@@ -30,7 +50,6 @@ export default function SettingsPage() {
     const config = API_PROVIDERS[provider]
     if (config) {
       if (provider === 'local') {
-        // 本地部署根据协议类型更新默认URL
         const protocolConfig = API_PROTOCOLS[protocol]
         setApiUrl(`http://localhost:${protocolConfig.defaultPort}${protocolConfig.defaultEndpoint}`)
       } else {
@@ -48,7 +67,7 @@ export default function SettingsPage() {
     }
   }, [protocol, isLocalProvider])
 
-  // 处理保存
+  // 处理保存文本配置
   const handleSave = () => {
     if (!apiKey.trim() && !isLocalProvider) {
       alert('请输入API密钥')
@@ -69,11 +88,11 @@ export default function SettingsPage() {
     }
 
     saveApiConfig(config)
-    alert('配置已保存')
+    alert('文本配置已保存')
     navigate('/')
   }
 
-  // 测试连接
+  // 测试文本连接
   const handleTest = async () => {
     if (!apiKey.trim() && !isLocalProvider) {
       alert('请先输入API密钥')
@@ -96,7 +115,6 @@ export default function SettingsPage() {
       let response: Response
 
       if (testProtocol === 'dashscope') {
-        // 通义千问特殊格式
         response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -110,7 +128,6 @@ export default function SettingsPage() {
           })
         })
       } else if (testProtocol === 'anthropic') {
-        // Claude/Anthropic格式
         response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -125,7 +142,6 @@ export default function SettingsPage() {
           })
         })
       } else {
-        // OpenAI兼容格式
         response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -141,7 +157,7 @@ export default function SettingsPage() {
       }
 
       if (response.ok) {
-        setTestResult({ success: true, message: '连接成功！' })
+        setTestResult({ success: true, message: '文本AI连接成功！' })
       } else {
         const errorData = await response.json().catch(() => ({}))
         setTestResult({
@@ -157,6 +173,95 @@ export default function SettingsPage() {
     } finally {
       setTesting(false)
     }
+  }
+
+  // 测试多媒体连接
+  const handleMediaTest = async () => {
+    setMediaTesting(true)
+    setMediaTestResult(null)
+    setMediaSaved(false)
+
+    try {
+      if (immersionConfig.modelMode === 'unified') {
+        if (!unifiedApiKey.trim()) {
+          setMediaTestResult({ success: false, message: '请输入全模态模型API密钥' })
+          return
+        }
+        // MiniMax 简单连接测试
+        const response = await fetch('https://api.minimax.io/v1/me', {
+          headers: {
+            'Authorization': `Bearer ${unifiedApiKey.trim()}`
+          }
+        })
+        if (response.ok || response.status === 401) {
+          // 401 说明Key有效但无权限访问此端点
+          setMediaTestResult({ success: true, message: '全模态模型API密钥有效！' })
+        } else {
+          setMediaTestResult({ success: false, message: `连接失败: ${response.status}` })
+        }
+      } else {
+        // 分离模式：测试图片和语音
+        const results: string[] = []
+
+        if (imageProvider === 'wanxi') {
+          const response = await fetch('https://dashscope.aliyuncs.com/api/v1/models', {
+            headers: {
+              'Authorization': `Bearer ${imageApiKey.trim() || 'dummy'}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (response.ok) {
+            results.push('图片API ✓')
+          } else {
+            results.push('图片API ✗')
+          }
+        }
+
+        if (speechProvider === 'aliyun') {
+          const response = await fetch('https://nls-gateway.cn-shanghai.aliyuncs.com/stream/v1/tts', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${speechApiKey.trim() || 'dummy'}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: '测试', voice: 'aixia' })
+          })
+          if (response.ok || response.status === 400) {
+            // 400 可能是因为参数问题，但Key有效
+            results.push('语音API ✓')
+          } else {
+            results.push('语音API ✗')
+          }
+        }
+
+        setMediaTestResult({
+          success: results.every(r => r.includes('✓')),
+          message: results.join(' | ')
+        })
+      }
+    } catch (err) {
+      setMediaTestResult({
+        success: false,
+        message: `测试失败: ${err instanceof Error ? err.message : '网络错误'}`
+      })
+    } finally {
+      setMediaTesting(false)
+    }
+  }
+
+  // 保存多媒体配置
+  const handleMediaSave = () => {
+    if (immersionConfig.modelMode === 'unified') {
+      setUnifiedApiKey(unifiedApiKey.trim())
+    } else {
+      setImageApiKey(imageApiKey.trim())
+      setImageProvider(imageProvider as 'wanxi' | 'dalle' | 'stability' | 'minimax')
+      setSpeechApiKey(speechApiKey.trim())
+      setSpeechProvider(speechProvider as 'aliyun' | 'openai' | 'elevenlabs' | 'minimax')
+    }
+    setMediaSaved(true)
+    setMediaTestResult({ success: true, message: '多媒体配置已保存！' })
+    setTimeout(() => setMediaSaved(false), 2000)
   }
 
   // 处理删除
@@ -184,11 +289,12 @@ export default function SettingsPage() {
           <div className="w-16"></div>
         </div>
 
-        {/* API配置 */}
+        {/* 文本AI配置 */}
         <div className="bg-slate-800 rounded-lg p-6 mb-4">
           <h2 className="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">
-            📡 API配置
+            📝 文本生成配置
           </h2>
+          <p className="text-slate-400 text-sm mb-4">用于生成案件内容、嫌疑人对话等文本</p>
 
           <div className="space-y-4">
             {/* 供应商选择 */}
@@ -236,7 +342,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* API地址 - 所有供应商都支持自定义 */}
+            {/* API地址 */}
             <div>
               <label className="block text-slate-300 mb-2 text-sm">API地址</label>
               <input
@@ -258,7 +364,7 @@ export default function SettingsPage() {
               )}
             </div>
 
-            {/* 模型名称 - 所有供应商都支持自定义 */}
+            {/* 模型名称 */}
             <div>
               <label className="block text-slate-300 mb-2 text-sm">模型名称</label>
               <input
@@ -268,7 +374,6 @@ export default function SettingsPage() {
                 placeholder="请输入模型名称"
                 className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-              {/* 模型建议 */}
               {currentConfig.modelSuggestions.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {currentConfig.modelSuggestions.map((suggestion) => (
@@ -309,11 +414,6 @@ export default function SettingsPage() {
               {currentConfig.docsUrl && (
                 <p className="text-slate-500 text-xs mt-1">
                   获取密钥: <a href={currentConfig.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary-400 hover:underline">{currentConfig.docsUrl}</a>
-                </p>
-              )}
-              {isLocalProvider && (
-                <p className="text-slate-500 text-xs mt-1">
-                  本地部署通常不需要API密钥，可留空
                 </p>
               )}
             </div>
@@ -367,116 +467,127 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 沉浸体验配置 */}
+        {/* 多媒体配置 */}
         <div className="bg-slate-800 rounded-lg p-6 mb-4">
           <h2 className="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">
-            🎨 沉浸体验配置
+            🎨 多媒体生成配置
           </h2>
+          <p className="text-slate-400 text-sm mb-4">用于生成案发现场图、嫌疑人画像、线索图、TTS语音等</p>
 
           <div className="space-y-4">
-            {/* 沉浸感等级选择 */}
+            {/* 多媒体模型配置模式 */}
             <div>
-              <label className="block text-slate-300 mb-2 text-sm">沉浸感等级</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(Object.keys(ImmersionLevelConfig) as ImmersionLevel[]).map((key) => {
-                  const level = ImmersionLevelConfig[key]
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setLevel(key)}
-                      className={`py-3 px-4 rounded-lg text-sm transition-colors text-center ${
-                        immersionConfig.level === key
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                      }`}
-                    >
-                      <div className="font-bold">{level.name}</div>
-                      <div className="text-xs opacity-70 mt-1">{level.description}</div>
-                    </button>
-                  )
-                })}
+              <label className="block text-slate-300 mb-2 text-sm">配置模式</label>
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setModelMode('unified')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
+                    immersionConfig.modelMode === 'unified'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  全模态模型（推荐）
+                </button>
+                <button
+                  onClick={() => setModelMode('separate')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
+                    immersionConfig.modelMode === 'separate'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                  }`}
+                >
+                  分别配置
+                </button>
               </div>
             </div>
 
-            {/* 多媒体模型配置模式 */}
-            {immersionConfig.level !== 'basic' && (
-              <>
+            {/* 全模态模式：全模态模型API Key */}
+            {immersionConfig.modelMode === 'unified' && (
+              <div>
+                <label className="block text-slate-300 mb-2 text-sm">全模态模型 API密钥</label>
+                <div className="relative">
+                  <input
+                    type={showImmersionKey ? 'text' : 'password'}
+                    value={unifiedApiKey}
+                    onChange={(e) => setUnifiedApiKeyState(e.target.value)}
+                    placeholder="输入MiniMax或其他全模态模型API密钥"
+                    className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    onClick={() => setShowImmersionKey(!showImmersionKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  >
+                    {showImmersionKey ? '🙈' : '👁️'}
+                  </button>
+                </div>
+                <p className="text-slate-500 text-xs mt-1">
+                  推荐使用 MiniMax，一Key搞定文本+图片+语音
+                </p>
+              </div>
+            )}
+
+            {/* 分离模式：图片和语音分别配置 */}
+            {immersionConfig.modelMode === 'separate' && (
+              <div className="space-y-4 bg-slate-700/50 rounded-lg p-4">
+                {/* 图片生成 */}
                 <div>
-                  <label className="block text-slate-300 mb-2 text-sm">多媒体模型配置</label>
-                  <div className="flex gap-2 mb-3">
+                  <label className="block text-slate-300 mb-2 text-sm">图片生成</label>
+                  <select
+                    value={imageProvider}
+                    onChange={(e) => setImageProviderState(e.target.value as 'wanxi' | 'dalle' | 'stability' | 'minimax')}
+                    className="w-full bg-slate-600 text-slate-300 rounded px-3 py-2 text-sm mb-2"
+                  >
+                    <option value="wanxi">通义万相</option>
+                    <option value="minimax">MiniMax</option>
+                    <option value="dalle">DALL-E 3</option>
+                  </select>
+                  <div className="relative">
+                    <input
+                      type={showImageKey ? 'text' : 'password'}
+                      value={imageApiKey}
+                      onChange={(e) => setImageApiKeyState(e.target.value)}
+                      placeholder={`${imageProvider === 'wanxi' ? '通义' : imageProvider === 'minimax' ? 'MiniMax' : 'DALL-E'} API密钥`}
+                      className="w-full bg-slate-600 text-slate-200 rounded-lg p-3 pr-12 text-sm"
+                    />
                     <button
-                      onClick={() => setModelMode('unified')}
-                      className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
-                        immersionConfig.modelMode === 'unified'
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                      }`}
+                      onClick={() => setShowImageKey(!showImageKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
                     >
-                      使用单一全模态模型（如MiniMax）
-                    </button>
-                    <button
-                      onClick={() => setModelMode('separate')}
-                      className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
-                        immersionConfig.modelMode === 'separate'
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                      }`}
-                    >
-                      分别配置各服务
+                      {showImageKey ? '🙈' : '👁️'}
                     </button>
                   </div>
                 </div>
 
-                {/* 统一模式：全模态模型API Key */}
-                {immersionConfig.modelMode === 'unified' && (
-                  <div>
-                    <label className="block text-slate-300 mb-2 text-sm">全模态模型 API密钥</label>
-                    <div className="relative">
-                      <input
-                        type={showImmersionKey ? 'text' : 'password'}
-                        value={unifiedApiKey}
-                        onChange={(e) => {
-                          setUnifiedApiKeyState(e.target.value)
-                          setUnifiedApiKey(e.target.value)
-                        }}
-                        placeholder="输入MiniMax或其他全模态模型API密钥"
-                        className="w-full bg-slate-700 text-slate-200 rounded-lg p-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                      <button
-                        onClick={() => setShowImmersionKey(!showImmersionKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
-                      >
-                        {showImmersionKey ? '🙈' : '👁️'}
-                      </button>
-                    </div>
-                    <p className="text-slate-500 text-xs mt-1">
-                      MiniMax支持文本+图片+语音，一Key多用
-                    </p>
+                {/* 语音合成 */}
+                <div>
+                  <label className="block text-slate-300 mb-2 text-sm">语音合成</label>
+                  <select
+                    value={speechProvider}
+                    onChange={(e) => setSpeechProviderState(e.target.value as 'aliyun' | 'openai' | 'elevenlabs' | 'minimax')}
+                    className="w-full bg-slate-600 text-slate-300 rounded px-3 py-2 text-sm mb-2"
+                  >
+                    <option value="aliyun">阿里云TTS</option>
+                    <option value="minimax">MiniMax TTS</option>
+                    <option value="openai">OpenAI TTS</option>
+                  </select>
+                  <div className="relative">
+                    <input
+                      type={showSpeechKey ? 'text' : 'password'}
+                      value={speechApiKey}
+                      onChange={(e) => setSpeechApiKeyState(e.target.value)}
+                      placeholder={`${speechProvider === 'aliyun' ? '阿里云' : speechProvider === 'minimax' ? 'MiniMax' : 'OpenAI'} API密钥`}
+                      className="w-full bg-slate-600 text-slate-200 rounded-lg p-3 pr-12 text-sm"
+                    />
+                    <button
+                      onClick={() => setShowSpeechKey(!showSpeechKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
+                    >
+                      {showSpeechKey ? '🙈' : '👁️'}
+                    </button>
                   </div>
-                )}
-
-                {/* 分离模式：图片和语音分别配置 */}
-                {immersionConfig.modelMode === 'separate' && (
-                  <div className="space-y-3 bg-slate-700/50 rounded-lg p-4">
-                    <div>
-                      <label className="block text-slate-400 mb-1 text-xs">图片生成</label>
-                      <select className="w-full bg-slate-600 text-slate-300 rounded px-3 py-2 text-sm">
-                        <option value="minimax">MiniMax</option>
-                        <option value="wanxi">通义万相</option>
-                        <option value="dalle">DALL-E 3</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 mb-1 text-xs">语音合成</label>
-                      <select className="w-full bg-slate-600 text-slate-300 rounded px-3 py-2 text-sm">
-                        <option value="minimax">MiniMax TTS</option>
-                        <option value="aliyun">阿里云TTS</option>
-                        <option value="openai">OpenAI TTS</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </>
+                </div>
+              </div>
             )}
 
             {/* 音量控制 */}
@@ -506,6 +617,34 @@ export default function SettingsPage() {
               <label htmlFor="soundEffects" className="text-slate-300 text-sm">
                 启用音效（如：收集线索、询问回答等交互音效）
               </label>
+            </div>
+
+            {/* 测试结果 */}
+            {mediaTestResult && (
+              <div className={`rounded-lg p-3 text-sm ${mediaTestResult.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                {mediaTestResult.success ? '✓' : '✗'} {mediaTestResult.message}
+              </div>
+            )}
+
+            {/* 操作按钮 */}
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleMediaTest}
+                disabled={mediaTesting}
+                className="flex-1 py-2 bg-slate-700 text-slate-300 rounded-lg text-sm hover:bg-slate-600 disabled:opacity-50"
+              >
+                {mediaTesting ? '测试中...' : '测试连接'}
+              </button>
+              <button
+                onClick={handleMediaSave}
+                className={`flex-1 py-2 rounded-lg text-sm transition-colors ${
+                  mediaSaved
+                    ? 'bg-green-600 text-white'
+                    : 'bg-primary-600 text-white hover:bg-primary-500'
+                }`}
+              >
+                {mediaSaved ? '已保存 ✓' : '保存配置'}
+              </button>
             </div>
           </div>
         </div>

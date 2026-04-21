@@ -1,5 +1,6 @@
 import db from './database.js'
-import type { Case, Victim, Suspect, Clue, Solution } from '../types/index.js'
+import type { Case, Victim, Suspect, Clue, Solution, CaseMedia } from '../types/index.js'
+import { MediaRepository } from './mediaRepository.js'
 
 // 案件仓储
 export class CaseRepository {
@@ -45,6 +46,11 @@ export class CaseRepository {
       keywords: row.keywords,
       createdAt: row.createdAt
     }
+  }
+
+  // 获取案件多媒体
+  static findMediaByCaseId(caseId: string): CaseMedia | null {
+    return MediaRepository.findByCaseId(caseId)
   }
 
   // 获取所有案件（不包含 solution）

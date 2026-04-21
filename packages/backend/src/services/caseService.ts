@@ -1,7 +1,10 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider, ApiProtocol, ImmersionLevel } from '../types'
+import type { Case, Suspect, Clue, Victim, Solution, AskSuspectResponse, ApiProvider, ApiProtocol, ImmersionLevel, CaseMedia, ImmersionConfig } from '../types'
 import { CaseRepository } from '../db/caseRepository.js'
+import { MediaRepository } from '../db/mediaRepository.js'
 import { ProgressRepository } from '../db/progressRepository.js'
+import { generateSceneImage, generateSuspectPortrait, generateClueImage, generatePlaceholderSVG } from './imageService.js'
+import { synthesizeSpeech } from './ttsService.js'
 
 // 类型定义
 type GeneratedCaseData = Omit<Case, 'id' | 'difficulty' | 'keywords' | 'createdAt'>
@@ -319,14 +322,71 @@ export async function generateCase(params: {
     createdAt: new Date().toISOString()
   }
 
-  // TODO: 根据 immersionLevel 生成多媒体（图片、语音等）
-  // 目前沉浸级别配置已接收，但多媒体生成功能待实现
+  // 根据沉浸级别生成多媒体
+  if (immersionLevel !== 'basic') {
+    await generateCaseMedia(newCase, immersionLevel, apiKey)
+  }
 
   // 保存到数据库
   CaseRepository.create(newCase)
   // 同时保留在内存中用于快速访问
   cases.set(caseId, newCase)
   return { caseId }
+}
+
+// 生成案件多媒体
+async function generateCaseMedia(caseData: Case, level: ImmersionLevel, apiKey?: string): Promise<void> {
+  const config: ImmersionConfig = {
+    level,
+    modelMode: 'unified',
+    unifiedApiKey: apiKey,
+    musicVolume: 50,
+    soundEffectsEnabled: true
+  }
+
+  const media: CaseMedia = {
+    sceneImages: [],
+    suspectImages: [],
+    clueImages: []
+  }
+
+  // 生成案发现场图（标准/沉浸都生成）
+  if (level === 'standard' || level === 'immersive') {
+    const sceneResult = await generateSceneImage(caseData.sceneDescription, config)
+    if (sceneResult.success && sceneResult.imageUrl) {
+      media.sceneImages.push(sceneResult.imageUrl)
+    } else {
+      // 降级：使用占位图
+      media.sceneImages.push(generatePlaceholderSVG('案发现场'))
+    }
+  }
+
+  // 生成嫌疑人画像（标准/沉浸都生成）
+  if (level === 'standard' || level === 'immersive') {
+    for (const suspect of caseData.suspects) {
+      const portraitResult = await generateSuspectPortrait(suspect, config)
+      if (portraitResult.success && portraitResult.imageUrl) {
+        media.suspectImages.push(portraitResult.imageUrl)
+      } else {
+        media.suspectImages.push(generatePlaceholderSVG(suspect.name))
+      }
+    }
+  }
+
+  // 生成线索图（仅沉浸模式）
+  if (level === 'immersive') {
+    for (const clue of caseData.clues) {
+      const clueResult = await generateClueImage(clue.description, clue.location, config)
+      if (clueResult.success && clueResult.imageUrl) {
+        media.clueImages.push(clueResult.imageUrl)
+      } else {
+        media.clueImages.push(generatePlaceholderSVG(clue.location))
+      }
+    }
+  }
+
+  // 保存多媒体到数据库
+  MediaRepository.create(caseData.id, media)
 }
 
 export async function getCase(id: string): Promise<Case | null> {
@@ -340,6 +400,11 @@ export async function getCase(id: string): Promise<Case | null> {
     return dbCase
   }
   return null
+}
+
+// 获取案件多媒体
+export async function getCaseMedia(caseId: string) {
+  return CaseRepository.findMediaByCaseId(caseId)
 }
 
 export async function submitAnswer(
@@ -903,5 +968,35 @@ function parseAIResponse(content: string, numSuspects: number): GeneratedCaseDat
     }
   } catch {
     throw new Error('JSON解析失败')
+  }
+}
+
+// 生成TTS语音
+export async function synthesizeTTS(
+  text: string,
+  immersionLevel: ImmersionLevel,
+  apiKey?: string
+): Promise<{ audioUrl?: string; fallback: boolean }> {
+  if (immersionLevel === 'basic') {
+    return { fallback: true }
+  }
+
+  const config: ImmersionConfig = {
+    level: immersionLevel,
+    modelMode: 'unified',
+    unifiedApiKey: apiKey,
+    musicVolume: 50,
+    soundEffectsEnabled: true
+  }
+
+  try {
+    const result = await synthesizeSpeech(text, config)
+    if (result.success && result.audioUrl) {
+      return { audioUrl: result.audioUrl, fallback: false }
+    }
+    return { fallback: true }
+  } catch (error) {
+    console.error('TTS synthesis failed:', error)
+    return { fallback: true }
   }
 }

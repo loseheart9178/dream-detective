@@ -3,11 +3,10 @@ import { ImmersionConfig } from '../types/index.js'
 // TTS提供商配置
 const TTS_PROVIDERS = {
   minimax: {
-    baseUrl: 'https://api.minimax.io/v1',
-    models: ['speech-2.8-hd', 'speech-2.8-turbo'],
-    synthesize: async (apiKey: string, text: string, voice: string = 'male-qnq') => {
-      // MiniMax TTS API
-      const response = await fetch('https://api.minimax.io/v1/t2a_v2', {
+    baseUrl: 'https://api.minimax.chat/v1',
+    synthesize: async (apiKey: string, text: string, voice: string = 'female-tianmei') => {
+      // MiniMax TTS API (Token Plan Plus)
+      const response = await fetch('https://api.minimax.chat/v1/t2a_v2', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,12 +30,16 @@ const TTS_PROVIDERS = {
       })
 
       if (!response.ok) {
-        throw new Error(`MiniMax TTS API error: ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(`MiniMax TTS API error: ${response.status} - ${errorData.base_resp?.status_msg || 'Unknown error'}`)
       }
 
       const data = await response.json()
-      // 返回音频URL或base64
-      return data.audio_url || data.data?.audio_url || null
+      // MiniMax TTS 返回 base64 编码的音频数据
+      if (data.data?.audio) {
+        return `data:audio/mp3;base64,${data.data.audio}`
+      }
+      return null
     }
   },
   aliyun: {
@@ -112,7 +115,7 @@ export async function synthesizeSpeech(
 ): Promise<TTSResult> {
   try {
     const audioUrl = await synthesizeWithProvider(text, config, voice)
-    return { success: true, audioUrl }
+    return { success: true, audioUrl: audioUrl || undefined }
   } catch (error: any) {
     console.error('TTS synthesis failed:', error.message)
     return createFallbackResult(error.message)
@@ -121,14 +124,16 @@ export async function synthesizeSpeech(
 
 // 根据嫌疑人性别选择默认声音
 export function getDefaultVoice(isKiller: boolean, directness: number): string {
-  // 凶手声音：稍微紧张/防御
+  // MiniMax Token Plan Plus 可用的语音
+  // female-tianmei: 女声，适合一般对话
+  // 可选: female-tianmei, female-yunyang, male-yunyang, male-qnq 等
   if (isKiller) {
-    if (directness >= 2) return 'male-qnq' // 委婉问题时稍放松
-    return 'male-yunyang' // 直白问题时紧张
+    if (directness >= 2) return 'female-tianmei' // 委婉问题时稍放松
+    return 'female-tianmei' // 直白问题时紧张
   }
   // 非凶手声音
-  if (directness >= 3) return 'female-aiqi' // 委婉问题时健谈
-  return 'female-aiya' // 正常回答
+  if (directness >= 3) return 'female-tianmei' // 委婉问题时健谈
+  return 'female-tianmei' // 正常回答
 }
 
 // 统一TTS生成函数

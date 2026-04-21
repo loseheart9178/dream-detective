@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import type { Case, Clue, Suspect, AskSuspectResponse, QuestionAnswer, QuestionDirectness } from '../types'
+import type { Case, Clue, Suspect, AskSuspectResponse, QuestionAnswer, QuestionDirectness, CaseMedia } from '../types'
 import { useGameProgress } from '../hooks/useGameProgress'
+import { useImmersionConfig } from '../hooks/useImmersionConfig'
 import QuestionInput from '../components/QuestionInput'
+import ImageModal from '../components/ImageModal'
+import AudioPlayer from '../components/AudioPlayer'
 
 type TabType = 'scene' | 'clues' | 'suspects' | 'submit'
 
@@ -21,6 +24,11 @@ export default function GamePage() {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
 
+  // 多媒体相关状态
+  const [caseMedia, setCaseMedia] = useState<CaseMedia | null>(null)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [ttsAudioUrl] = useState<string | null>(null)
+
   const {
     getProgress,
     createProgress,
@@ -32,6 +40,8 @@ export default function GamePage() {
     saveCaseData,
     getCaseData
   } = useGameProgress()
+
+  const { config: immersionConfig } = useImmersionConfig()
 
   // 显示保存提示
   const showSaveMessage = useCallback(() => {
@@ -97,6 +107,26 @@ export default function GamePage() {
       setLoading(false)
     }
   }
+
+  // 获取案件多媒体数据
+  const fetchCaseMedia = useCallback(async () => {
+    if (!caseId) return
+    try {
+      const response = await fetch(`/api/case/${caseId}/media`)
+      const data = await response.json()
+      if (data.success && data.data) {
+        setCaseMedia(data.data)
+      }
+    } catch (err) {
+      console.error('获取案件多媒体失败', err)
+    }
+  }, [caseId])
+
+  useEffect(() => {
+    if (caseId && immersionConfig.level !== 'basic') {
+      fetchCaseMedia()
+    }
+  }, [caseId, immersionConfig.level, fetchCaseMedia])
 
   // 保存线索进度
   useEffect(() => {
@@ -342,6 +372,33 @@ export default function GamePage() {
               <h3 className="text-lg font-bold text-slate-200 mb-2">案件背景</h3>
               <p className="text-slate-300">{caseData.description}</p>
             </div>
+
+            {/* 案发现场图片 */}
+            {immersionConfig.level !== 'basic' && caseMedia?.sceneImages && caseMedia.sceneImages.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-bold text-slate-200 mb-3">案发现场</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {caseMedia.sceneImages.map((img, idx) => (
+                    <div
+                      key={idx}
+                      className="relative rounded-lg overflow-hidden cursor-pointer group"
+                      onClick={() => setSelectedImage(img)}
+                    >
+                      <img
+                        src={img}
+                        alt={`案发现场 ${idx + 1}`}
+                        className="w-full h-48 object-cover transition-transform group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                        </svg>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -351,6 +408,7 @@ export default function GamePage() {
             <div className="space-y-3">
               {caseData.clues.map((clue) => {
                 const isCollected = collectedClues.includes(clue.id)
+                const clueImage = caseMedia?.clueImages?.[caseData.clues.indexOf(clue)]
                 return (
                   <div
                     key={clue.id}
@@ -359,17 +417,30 @@ export default function GamePage() {
                     }`}
                     onClick={() => handleCollectClue(clue)}
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-slate-300 font-bold">
-                          {isCollected ? clue.location : '???'}
-                        </p>
-                        <p className="text-slate-400 mt-1">
-                          {isCollected ? clue.description : '点击以发现线索'}
-                        </p>
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-slate-300 font-bold">
+                              {isCollected ? clue.location : '???'}
+                            </p>
+                            <p className="text-slate-400 mt-1">
+                              {isCollected ? clue.description : '点击以发现线索'}
+                            </p>
+                          </div>
+                          {isCollected && (
+                            <span className="text-green-400">✓</span>
+                          )}
+                        </div>
                       </div>
-                      {isCollected && (
-                        <span className="text-green-400">✓</span>
+                      {/* 线索图片 */}
+                      {isCollected && immersionConfig.level !== 'basic' && clueImage && (
+                        <div
+                          className="w-20 h-20 rounded overflow-hidden cursor-pointer flex-shrink-0"
+                          onClick={(e) => { e.stopPropagation(); setSelectedImage(clueImage); }}
+                        >
+                          <img src={clueImage} alt={clue.location} className="w-full h-full object-cover" />
+                        </div>
                       )}
                     </div>
                   </div>
@@ -383,31 +454,72 @@ export default function GamePage() {
           <div>
             <h2 className="text-xl font-bold text-slate-200 mb-4">嫌疑人</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {caseData.suspects.map((suspect) => (
-                <div
-                  key={suspect.id}
-                  className={`p-4 rounded-lg cursor-pointer transition-colors ${
-                    selectedSuspect?.id === suspect.id
-                      ? 'bg-slate-600 ring-2 ring-primary-500'
-                      : 'bg-slate-700 hover:bg-slate-600'
-                  }`}
-                  onClick={() => setSelectedSuspect(suspect)}
-                >
-                  <p className="text-slate-200 font-bold text-lg">{suspect.name}</p>
-                  <p className="text-slate-400 text-sm">{suspect.age}岁 · {suspect.occupation}</p>
-                  <p className="text-slate-500 text-sm mt-1">与死者关系: {suspect.relationToVictim}</p>
-                </div>
-              ))}
+              {caseData.suspects.map((suspect, idx) => {
+                const suspectImage = caseMedia?.suspectImages?.[idx]
+                return (
+                  <div
+                    key={suspect.id}
+                    className={`p-4 rounded-lg cursor-pointer transition-colors ${
+                      selectedSuspect?.id === suspect.id
+                        ? 'bg-slate-600 ring-2 ring-primary-500'
+                        : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                    onClick={() => setSelectedSuspect(suspect)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* 嫌疑人头像 */}
+                      {immersionConfig.level !== 'basic' && suspectImage ? (
+                        <div
+                          className="w-12 h-12 rounded-full overflow-hidden cursor-pointer flex-shrink-0"
+                          onClick={(e) => { e.stopPropagation(); setSelectedImage(suspectImage); }}
+                        >
+                          <img src={suspectImage} alt={suspect.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-slate-600 flex items-center justify-center text-slate-400 flex-shrink-0">
+                          {suspect.name[0]}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-slate-200 font-bold text-lg">{suspect.name}</p>
+                        <p className="text-slate-400 text-sm">{suspect.age}岁 · {suspect.occupation}</p>
+                        <p className="text-slate-500 text-sm mt-1">与死者关系: {suspect.relationToVictim}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            
+
             {selectedSuspect && (
               <div className="mt-6 bg-slate-700 rounded-lg p-4">
-                <h3 className="text-lg font-bold text-slate-200 mb-3">
-                  {selectedSuspect.name}的详细信息
-                </h3>
-                <div className="space-y-2 text-slate-300">
-                  <p><strong>动机:</strong> {selectedSuspect.motive}</p>
-                  <p><strong>不在场证明:</strong> {selectedSuspect.alibi}</p>
+                <div className="flex items-start gap-4">
+                  {/* 选中嫌疑人头像 */}
+                  {immersionConfig.level !== 'basic' && caseMedia?.suspectImages && (
+                    <div
+                      className="w-24 h-24 rounded-lg overflow-hidden cursor-pointer flex-shrink-0"
+                      onClick={() => {
+                        const idx = caseData.suspects.findIndex(s => s.id === selectedSuspect.id)
+                        const img = caseMedia?.suspectImages?.[idx]
+                        if (img) setSelectedImage(img)
+                      }}
+                    >
+                      <img
+                        src={caseMedia.suspectImages[caseData.suspects.findIndex(s => s.id === selectedSuspect.id)]}
+                        alt={selectedSuspect.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-slate-200 mb-3">
+                      {selectedSuspect.name}的详细信息
+                    </h3>
+                    <div className="space-y-2 text-slate-300">
+                      <p><strong>动机:</strong> {selectedSuspect.motive}</p>
+                      <p><strong>不在场证明:</strong> {selectedSuspect.alibi}</p>
+                    </div>
+                  </div>
                 </div>
                 {/* 新的问题组件 */}
                 <div className="mt-4">
@@ -428,9 +540,19 @@ export default function GamePage() {
                         {qa.isLoading ? (
                           <p className="text-slate-500 text-sm italic">正在思考中...</p>
                         ) : (
-                          <p className="text-slate-300 text-sm">
-                            <strong>{selectedSuspect.name}:</strong> {qa.answer}
-                          </p>
+                          <div className="flex items-start gap-2">
+                            <p className="text-slate-300 text-sm flex-1">
+                              <strong>{selectedSuspect.name}:</strong> {qa.answer}
+                            </p>
+                            {/* TTS 语音播放按钮 */}
+                            {immersionConfig.level !== 'basic' && qa.answer && (
+                              <AudioPlayer
+                                src={ttsAudioUrl || undefined}
+                                type="tts"
+                                label="朗读"
+                              />
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
@@ -487,6 +609,15 @@ export default function GamePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 图片查看弹窗 */}
+      {selectedImage && (
+        <ImageModal
+          src={selectedImage}
+          alt="案件图片"
+          onClose={() => setSelectedImage(null)}
+        />
       )}
     </div>
   )
