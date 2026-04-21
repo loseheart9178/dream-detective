@@ -322,9 +322,13 @@ export async function generateCase(params: {
     createdAt: new Date().toISOString()
   }
 
-  // 根据沉浸级别生成多媒体
+  // 根据沉浸级别生成多媒体（失败时降级，不影响案件保存）
   if (immersionLevel !== 'basic') {
-    await generateCaseMedia(newCase, immersionLevel, apiKey)
+    try {
+      await generateCaseMedia(newCase, immersionLevel, apiKey)
+    } catch (error) {
+      console.error('多媒体生成失败，使用降级方案:', error)
+    }
   }
 
   // 保存到数据库
