@@ -39,6 +39,7 @@ export default function WaitingPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>('text')
   const [progress, setProgress] = useState(10)
   const [error, setError] = useState<string | null>(null)
+  const [errorType, setErrorType] = useState<'retry' | 'back' | null>(null)
 
   // 随机选择一个插图
   const randomIllustration = DETECTIVE_ILLUSTRATIONS[Math.floor(Math.random() * DETECTIVE_ILLUSTRATIONS.length)]
@@ -138,7 +139,11 @@ export default function WaitingPage() {
         throw new Error(data.message || '生成失败，请重试')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '生成失败，请返回重试')
+      const errorMessage = err instanceof Error ? err.message : '生成失败，请返回重试'
+      // 检测是否是529服务器拥挤错误
+      const isServerBusy = errorMessage.includes('529') || errorMessage.includes('服务器拥挤')
+      setError(errorMessage)
+      setErrorType(isServerBusy ? 'retry' : 'back')
       console.error(err)
     }
   }, [searchParams, saveCaseData, navigate])
@@ -151,6 +156,12 @@ export default function WaitingPage() {
     navigate('/create')
   }
 
+  const handleRetry = () => {
+    setError(null)
+    setErrorType(null)
+    generateCase()
+  }
+
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center p-8">
@@ -158,12 +169,36 @@ export default function WaitingPage() {
           <div className="text-5xl mb-4">❌</div>
           <h2 className="text-xl font-bold text-red-400 mb-4">案件生成失败</h2>
           <p className="text-slate-300 mb-6">{error}</p>
-          <button
-            onClick={handleGoBack}
-            className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-500 transition-colors"
-          >
-            返回重新生成
-          </button>
+          <div className="flex gap-3 justify-center">
+            {errorType === 'retry' ? (
+              <>
+                <button
+                  onClick={handleRetry}
+                  className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-500 transition-colors"
+                >
+                  重试
+                </button>
+                <button
+                  onClick={handleGoBack}
+                  className="px-6 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
+                >
+                  返回
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleGoBack}
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-500 transition-colors"
+              >
+                返回重新生成
+              </button>
+            )}
+          </div>
+          {errorType === 'retry' && (
+            <p className="text-slate-500 text-sm mt-4">
+              服务器繁忙，建议稍后重试
+            </p>
+          )}
         </div>
       </div>
     )
