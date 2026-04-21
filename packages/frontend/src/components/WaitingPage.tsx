@@ -8,6 +8,15 @@ interface WaitingPageProps {
   onCancel?: () => void
 }
 
+// 经典侦探插图URL
+const DETECTIVE_ILLUSTRATIONS = [
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=300&fit=crop', // 放大镜
+  'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&h=300&fit=crop', // 推理
+  'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=400&h=300&fit=crop', // 法律
+  'https://images.unsplash.com/photo-1450101499163-c8848c66ca55?w=400&h=300&fit=crop', // 调查
+  'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=400&h=300&fit=crop', // 线索
+]
+
 const PHASE_LABELS: Record<string, string> = {
   text: '正在生成案件剧情...',
   images: '正在生成场景图片...',
@@ -53,6 +62,9 @@ export default function WaitingPage({ currentPhase, progress, estimatedTimeLeft,
     return `${minutes}分${secs}秒`
   }
 
+  // 随机选择一个插图
+const randomIllustration = DETECTIVE_ILLUSTRATIONS[Math.floor(Math.random() * DETECTIVE_ILLUSTRATIONS.length)]
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center p-8">
       {/* 主标题 */}
@@ -60,6 +72,23 @@ export default function WaitingPage({ currentPhase, progress, estimatedTimeLeft,
         <div className="text-6xl mb-4">🔍</div>
         <h1 className="text-3xl font-bold text-slate-100 mb-2">正在构建你的案件</h1>
         <p className="text-slate-400">{PHASE_LABELS[currentPhase]}</p>
+      </div>
+
+      {/* 经典侦探插图 */}
+      <div className="mb-8 relative">
+        <div className="w-64 h-48 rounded-lg overflow-hidden border-2 border-slate-700 shadow-xl">
+          <img
+            src={randomIllustration}
+            alt="侦探插图"
+            className="w-full h-full object-cover opacity-80"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
+        </div>
+        <div className="absolute bottom-2 left-0 right-0 text-center">
+          <span className="text-xs text-slate-400 bg-slate-800/80 px-2 py-1 rounded">
+            经典侦探故事
+          </span>
+        </div>
       </div>
 
       {/* 进度指示器 */}
