@@ -4,6 +4,8 @@ import { useApiConfig } from '../hooks/useApiConfig'
 import { useImmersionConfig } from '../hooks/useImmersionConfig'
 import { API_PROVIDERS, API_PROTOCOLS, type ApiProvider, type ApiConfig, type ApiProtocol } from '../types'
 
+const STORAGE_KEY = 'dream-detective-immersion-config'
+
 export default function SettingsPage() {
   const navigate = useNavigate()
   const { apiConfig, saveApiConfig, deleteApiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
@@ -66,6 +68,19 @@ export default function SettingsPage() {
       setApiUrl(`http://localhost:${protocolConfig.defaultPort}${protocolConfig.defaultEndpoint}`)
     }
   }, [protocol, isLocalProvider])
+
+  // 加载保存的多媒体配置
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        setUnifiedApiKeyState(parsed.unifiedApiKey || '')
+        setImageApiKeyState(parsed.imageApiKey || '')
+        setSpeechApiKeyState(parsed.speechApiKey || '')
+      } catch {}
+    }
+  }, [])
 
   // 处理保存文本配置
   const handleSave = () => {
@@ -187,14 +202,22 @@ export default function SettingsPage() {
           setMediaTestResult({ success: false, message: '请输入全模态模型API密钥' })
           return
         }
-        // MiniMax 简单连接测试
-        const response = await fetch('https://api.minimax.io/v1/me', {
+        // MiniMax 简单连接测试 - 使用正确的端点
+        const response = await fetch('https://api.minimax.chat/v1/t2a_v2', {
+          method: 'POST',
           headers: {
-            'Authorization': `Bearer ${unifiedApiKey.trim()}`
-          }
+            'Authorization': `Bearer ${unifiedApiKey.trim()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'speech-2.8-hd',
+            text: '测试',
+            voice_setting: { voice_id: 'female-tianmei', speed: 1.0, volume: 1.0, pitch: 0 },
+            audio_setting: { audio_format: 'mp3', sample_rate: 32000, bitrate: 128000 }
+          })
         })
-        if (response.ok || response.status === 401) {
-          // 401 说明Key有效但无权限访问此端点
+        if (response.ok || response.status === 400 || response.status === 401) {
+          // 400/401 说明Key有效
           setMediaTestResult({ success: true, message: '全模态模型API密钥有效！' })
         } else {
           setMediaTestResult({ success: false, message: `连接失败: ${response.status}` })
@@ -253,14 +276,27 @@ export default function SettingsPage() {
   const handleMediaSave = () => {
     if (immersionConfig.modelMode === 'unified') {
       setUnifiedApiKey(unifiedApiKey.trim())
+      setUnifiedApiKeyState(unifiedApiKey.trim()) // 同步更新本地状态
     } else {
       setImageApiKey(imageApiKey.trim())
+      setImageApiKeyState(imageApiKey.trim())
       setImageProvider(imageProvider as 'wanxi' | 'dalle' | 'stability' | 'minimax')
       setSpeechApiKey(speechApiKey.trim())
+      setSpeechApiKeyState(speechApiKey.trim())
       setSpeechProvider(speechProvider as 'aliyun' | 'openai' | 'elevenlabs' | 'minimax')
     }
     setMediaSaved(true)
     setMediaTestResult({ success: true, message: '多媒体配置已保存！' })
+    // 重新加载配置以确保页面状态同步
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        setUnifiedApiKeyState(parsed.unifiedApiKey || '')
+        setImageApiKeyState(parsed.imageApiKey || '')
+        setSpeechApiKeyState(parsed.speechApiKey || '')
+      } catch {}
+    }
     setTimeout(() => setMediaSaved(false), 2000)
   }
 
