@@ -51,7 +51,8 @@ export default function CreateCasePage() {
       apiUrl: apiConfig?.apiUrl || '',
       model: apiConfig?.model || '',
       apiKey: apiConfig?.apiKey || '',
-      protocol: apiConfig?.protocol || ''
+      protocol: apiConfig?.protocol || '',
+      unifiedApiKey: immersionConfig.unifiedApiKey || ''
     })
     navigate(`/waiting?${params.toString()}`)
   }, [keywords, difficulty, numSuspects, immersionLevel, apiConfig, navigate])

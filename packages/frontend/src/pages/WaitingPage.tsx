@@ -77,6 +77,7 @@ export default function WaitingPage() {
     const model = searchParams.get('model') || ''
     const apiKey = searchParams.get('apiKey') || ''
     const protocol = searchParams.get('protocol') || ''
+    const unifiedApiKey = searchParams.get('unifiedApiKey') || ''
 
     if (!keywords || keywords.length < 2) {
       setError('关键词无效，请返回重新输入')
@@ -96,7 +97,8 @@ export default function WaitingPage() {
         apiProvider: (apiProvider || undefined) as any,
         apiUrl: apiUrl || undefined,
         model: model || undefined,
-        protocol: (protocol || undefined) as any
+        protocol: (protocol || undefined) as any,
+        unifiedApiKey: unifiedApiKey || undefined
       }
 
       setProgress(40)

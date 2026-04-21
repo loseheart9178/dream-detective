@@ -80,6 +80,7 @@ export interface GenerateCaseRequest {
   apiProvider?: ApiProvider
   model?: string
   protocol?: ApiProtocol
+  unifiedApiKey?: string
 }
 
 // API供应商类型
