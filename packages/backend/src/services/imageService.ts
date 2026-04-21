@@ -184,8 +184,8 @@ function createFallbackResult(errorMessage: string): ImageGenerationResult {
   if (errorMessage.includes('content') || errorMessage.includes('reject') || errorMessage.includes('审核')) {
     return { success: false, fallbackText: '图片内容被审核过滤，已使用占位图', errorType: 'content_rejected' }
   }
-  if (errorMessage.includes('429') || errorMessage.includes('rate')) {
-    return { success: false, fallbackText: '请求过于频繁，已使用占位图', errorType: 'rate_limit' }
+  if (errorMessage.includes('429') || errorMessage.includes('rate') || errorMessage.includes('529')) {
+    return { success: false, fallbackText: '服务器繁忙，图片生成失败，已使用占位图', errorType: 'rate_limit' }
   }
   return { success: false, fallbackText: '图片生成失败，已使用占位图', errorType: 'unknown' }
 }
