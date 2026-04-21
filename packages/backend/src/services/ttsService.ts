@@ -175,8 +175,8 @@ function createFallbackResult(errorMessage: string): TTSResult {
   if (errorMessage.includes('timeout')) {
     return { success: false, fallbackText: '语音合成超时，已使用文字显示', errorType: 'timeout' }
   }
-  if (errorMessage.includes('429') || errorMessage.includes('rate')) {
-    return { success: false, fallbackText: '请求过于频繁，已使用文字显示', errorType: 'rate_limit' }
+  if (errorMessage.includes('429') || errorMessage.includes('rate') || errorMessage.includes('529')) {
+    return { success: false, fallbackText: '服务器繁忙，请稍后再试，已使用文字显示', errorType: 'rate_limit' }
   }
   if (errorMessage.includes('403') || errorMessage.includes('unauthorized')) {
     return { success: false, fallbackText: 'API密钥无效，已使用文字显示', errorType: 'service_unavailable' }
