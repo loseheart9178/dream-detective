@@ -5,6 +5,7 @@ import { ImmersionLevelConfig } from '../types'
 import { useGameProgress } from '../hooks/useGameProgress'
 import { useApiConfig } from '../hooks/useApiConfig'
 import { useImmersionConfig } from '../hooks/useImmersionConfig'
+import WaitingPage from '../components/WaitingPage'
 
 // 预设关键词标签
 const PRESET_KEYWORDS = [
@@ -27,7 +28,8 @@ export default function CreateCasePage() {
   const [immersionLevel, setImmersionLevel] = useState<ImmersionLevel>(immersionConfig.level)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [generatingStage, setGeneratingStage] = useState('')
+  const [generatingPhase, setGeneratingPhase] = useState<'text' | 'images' | 'audio' | 'complete'>('text')
+  const [progress, setProgress] = useState(0)
 
   const handleGenerate = useCallback(async () => {
     if (!keywords.trim()) {
@@ -47,7 +49,8 @@ export default function CreateCasePage() {
 
     setIsGenerating(true)
     setError(null)
-    setGeneratingStage('正在连接AI服务...')
+    setGeneratingPhase('text')
+    setProgress(10)
 
     try {
       const request: GenerateCaseRequest = {
@@ -62,7 +65,7 @@ export default function CreateCasePage() {
         protocol: apiConfig?.protocol
       }
 
-      setGeneratingStage('正在构思案件场景...')
+      setProgress(30)
       const response = await fetch('/api/case/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +79,8 @@ export default function CreateCasePage() {
       }
 
       if (data.success && data.data.caseId) {
-        setGeneratingStage('正在获取案件详情...')
+        setGeneratingPhase('images')
+        setProgress(60)
         // 获取并保存案件数据到localStorage
         const caseResponse = await fetch(`/api/case/${data.data.caseId}`)
         if (!caseResponse.ok) {
@@ -84,6 +88,9 @@ export default function CreateCasePage() {
         }
         const caseData = await caseResponse.json()
         if (caseData.success) {
+          // 多媒体生成在后台进行，先跳转到游戏页面
+          setGeneratingPhase('complete')
+          setProgress(100)
           saveCaseData(caseData.data as Case)
           navigate(`/game/${data.data.caseId}`)
         } else {
@@ -97,7 +104,7 @@ export default function CreateCasePage() {
       console.error(err)
     } finally {
       setIsGenerating(false)
-      setGeneratingStage('')
+      setGeneratingPhase('complete')
     }
   }, [keywords, difficulty, numSuspects, immersionLevel, apiConfig, saveCaseData, navigate])
 
@@ -285,41 +292,26 @@ export default function CreateCasePage() {
             </div>
           )}
 
-          {/* 生成进度提示 */}
-          {isGenerating && generatingStage && (
-            <div className="text-primary-400 text-center text-sm">
-              <span className="inline-flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                {generatingStage}
-              </span>
-            </div>
-          )}
-
           {/* 生成按钮 */}
-          <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className={`w-full py-4 rounded-lg font-bold text-lg transition-colors ${
-              isGenerating
-                ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                : 'bg-primary-600 hover:bg-primary-500 text-white'
-            }`}
-          >
-            {isGenerating ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                AI正在生成案件...
-              </span>
-            ) : (
-              '生成案件'
-            )}
-          </button>
+          {isGenerating ? (
+            <WaitingPage
+              currentPhase={generatingPhase}
+              progress={progress}
+              estimatedTimeLeft={60}
+            />
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className={`w-full py-4 rounded-lg font-bold text-lg transition-colors ${
+                isGenerating
+                  ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                  : 'bg-primary-600 hover:bg-primary-500 text-white'
+              }`}
+            >
+              生成案件
+            </button>
+          )}
         </div>
       </div>
     </div>
