@@ -40,6 +40,8 @@ export default function WaitingPage() {
   const [progress, setProgress] = useState(10)
   const [error, setError] = useState<string | null>(null)
   const [errorType, setErrorType] = useState<'retry' | 'back' | null>(null)
+  const [startTime] = useState(() => Date.now())
+  const [totalTime, setTotalTime] = useState<number | null>(null)
 
   // 随机选择一个插图
   const randomIllustration = DETECTIVE_ILLUSTRATIONS[Math.floor(Math.random() * DETECTIVE_ILLUSTRATIONS.length)]
@@ -126,12 +128,14 @@ export default function WaitingPage() {
         if (caseData.success) {
           setCurrentPhase('complete')
           setProgress(100)
+          const elapsedSeconds = Math.round((Date.now() - startTime) / 1000)
+          setTotalTime(elapsedSeconds)
           saveCaseData(caseData.data as Case)
 
           // 延迟跳转到游戏页面，让用户看到完成状态
           setTimeout(() => {
             navigate(`/game/${data.data.caseId}`)
-          }, 1500)
+          }, 2000)
         } else {
           throw new Error(caseData.message || '获取案件详情失败')
         }
@@ -271,9 +275,13 @@ export default function WaitingPage() {
         )}
       </div>
 
-      {/* 预估时间 */}
+      {/* 时间显示 */}
       <div className="mt-6 text-slate-500 text-sm">
-        {currentPhase === 'complete' ? '生成完成！正在跳转到游戏...' : '预计需要 30秒 - 2分钟'}
+        {currentPhase === 'complete' && totalTime ? (
+          <span>生成耗时: {totalTime}秒</span>
+        ) : (
+          <span>预计需要 30秒 - 2分钟</span>
+        )}
       </div>
 
       {/* 小提示 */}
