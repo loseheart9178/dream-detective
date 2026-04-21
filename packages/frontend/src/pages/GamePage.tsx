@@ -297,6 +297,9 @@ export default function GamePage() {
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-primary-400">{caseData.title}</h1>
             <p className="text-slate-400 text-sm mt-1">难度: {'★'.repeat(caseData.difficulty)}</p>
+            <p className="text-slate-500 text-xs mt-1">
+              创建时间: {new Date(caseData.createdAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </p>
           </div>
           <div className="flex gap-2">
             <button
