@@ -1,11 +1,9 @@
 import { useState, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import type { GenerateCaseRequest, Case, ImmersionLevel } from '../types'
+import type { ImmersionLevel } from '../types'
 import { ImmersionLevelConfig } from '../types'
-import { useGameProgress } from '../hooks/useGameProgress'
 import { useApiConfig } from '../hooks/useApiConfig'
 import { useImmersionConfig } from '../hooks/useImmersionConfig'
-import WaitingPage from '../components/WaitingPage'
 
 // 预设关键词标签
 const PRESET_KEYWORDS = [
@@ -19,19 +17,15 @@ const PRESET_KEYWORDS = [
 
 export default function CreateCasePage() {
   const navigate = useNavigate()
-  const { saveCaseData } = useGameProgress()
   const { apiConfig, getDisplayApiKey, hasApiKey } = useApiConfig()
   const { config: immersionConfig } = useImmersionConfig()
   const [keywords, setKeywords] = useState('')
   const [difficulty, setDifficulty] = useState(2)
   const [numSuspects, setNumSuspects] = useState(4)
   const [immersionLevel, setImmersionLevel] = useState<ImmersionLevel>(immersionConfig.level)
-  const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [generatingPhase, setGeneratingPhase] = useState<'text' | 'images' | 'audio' | 'complete'>('text')
-  const [progress, setProgress] = useState(0)
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(() => {
     if (!keywords.trim()) {
       setError('请输入至少一个关键词')
       return
@@ -47,66 +41,20 @@ export default function CreateCasePage() {
       return
     }
 
-    setIsGenerating(true)
-    setError(null)
-    setGeneratingPhase('text')
-    setProgress(10)
-
-    try {
-      const request: GenerateCaseRequest = {
-        keywords: keywords.trim(),
-        difficulty,
-        numSuspects,
-        immersionLevel,
-        apiKey: apiConfig?.apiKey,
-        apiProvider: apiConfig?.apiProvider,
-        apiUrl: apiConfig?.apiUrl,
-        model: apiConfig?.model,
-        protocol: apiConfig?.protocol
-      }
-
-      setProgress(30)
-      const response = await fetch('/api/case/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.message || '生成失败，请重试')
-      }
-
-      if (data.success && data.data.caseId) {
-        setGeneratingPhase('images')
-        setProgress(60)
-        // 获取并保存案件数据到localStorage
-        const caseResponse = await fetch(`/api/case/${data.data.caseId}`)
-        if (!caseResponse.ok) {
-          throw new Error('获取案件详情失败')
-        }
-        const caseData = await caseResponse.json()
-        if (caseData.success) {
-          // 多媒体生成在后台进行，先跳转到游戏页面
-          setGeneratingPhase('complete')
-          setProgress(100)
-          saveCaseData(caseData.data as Case)
-          navigate(`/game/${data.data.caseId}`)
-        } else {
-          throw new Error(caseData.message || '获取案件详情失败')
-        }
-      } else {
-        throw new Error(data.message || '生成失败，请重试')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '网络错误，请检查后端服务是否启动')
-      console.error(err)
-    } finally {
-      setIsGenerating(false)
-      setGeneratingPhase('complete')
-    }
-  }, [keywords, difficulty, numSuspects, immersionLevel, apiConfig, saveCaseData, navigate])
+    // 跳转到等待页面，携带参数
+    const params = new URLSearchParams({
+      keywords: keywords.trim(),
+      difficulty: String(difficulty),
+      numSuspects: String(numSuspects),
+      immersionLevel,
+      apiProvider: apiConfig?.apiProvider || '',
+      apiUrl: apiConfig?.apiUrl || '',
+      model: apiConfig?.model || '',
+      apiKey: apiConfig?.apiKey || '',
+      protocol: apiConfig?.protocol || ''
+    })
+    navigate(`/waiting?${params.toString()}`)
+  }, [keywords, difficulty, numSuspects, immersionLevel, apiConfig, navigate])
 
   // 点击预设标签
   const handlePresetClick = (value: string) => {
@@ -231,7 +179,6 @@ export default function CreateCasePage() {
                   <button
                     key={key}
                     onClick={() => setImmersionLevel(key)}
-                    disabled={isGenerating}
                     className={`py-3 px-4 rounded-lg text-sm transition-colors text-center ${
                       immersionLevel === key
                         ? 'bg-primary-600 text-white'
@@ -259,7 +206,6 @@ export default function CreateCasePage() {
               onChange={(e) => setKeywords(e.target.value)}
               placeholder="输入场景、主题等关键词，如：游轮 暴风雨 遗产"
               className="w-full h-24 bg-slate-700 text-slate-200 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
-              disabled={isGenerating}
             />
             <p className="text-slate-500 text-sm mt-1">
               提示：多个关键词用空格分隔 ({keywords.length}/100字)
@@ -274,8 +220,7 @@ export default function CreateCasePage() {
                 <button
                   key={preset.label}
                   onClick={() => handlePresetClick(preset.value)}
-                  disabled={isGenerating}
-                  className={`px-3 py-1 bg-slate-700 text-slate-400 rounded-full text-sm hover:bg-slate-600 hover:text-slate-200 transition-colors disabled:opacity-50 ${
+                  className={`px-3 py-1 bg-slate-700 text-slate-400 rounded-full text-sm hover:bg-slate-600 hover:text-slate-200 transition-colors ${
                     keywords === preset.value ? 'ring-2 ring-primary-500 text-primary-400' : ''
                   }`}
                 >
@@ -293,25 +238,12 @@ export default function CreateCasePage() {
           )}
 
           {/* 生成按钮 */}
-          {isGenerating ? (
-            <WaitingPage
-              currentPhase={generatingPhase}
-              progress={progress}
-              estimatedTimeLeft={60}
-            />
-          ) : (
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className={`w-full py-4 rounded-lg font-bold text-lg transition-colors ${
-                isGenerating
-                  ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                  : 'bg-primary-600 hover:bg-primary-500 text-white'
-              }`}
-            >
-              生成案件
-            </button>
-          )}
+          <button
+            onClick={handleGenerate}
+            className="w-full py-4 rounded-lg font-bold text-lg bg-primary-600 hover:bg-primary-500 text-white transition-colors"
+          >
+            生成案件
+          </button>
         </div>
       </div>
     </div>
